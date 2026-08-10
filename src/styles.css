@@ -1,0 +1,1171 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI Variable", "Microsoft YaHei UI", system-ui, sans-serif;
+  font-synthesis: none;
+  --bg: #eef3f9;
+  --panel: #f8fbff;
+  --panel-strong: #ffffff;
+  --ink: #11253f;
+  --muted: #516783;
+  --line: #cbd7e6;
+  --line-strong: #8fa5c0;
+  --accent: #1f5fd1;
+  --accent-ink: #ffffff;
+  --spi: #7c3aed;
+  --i2c: #0d9488;
+  --uart: #ea580c;
+  --fdcan: #b91c1c;
+  --sdmmc: #2563eb;
+  --quadspi: #7e22ce;
+  --usb: #0891b2;
+  --eth: #15803d;
+  --timer: #ca8a04;
+  --analog: #c2410c;
+  --protected: #5b7089;
+  --ok: #15803d;
+  --danger: #dc2626;
+  --warn: #d97706;
+  --fixed: #8296b2;
+  --chip-1: #eaf1fb;
+  --chip-2: #dce8f8;
+  --chip-3: #cbdcf1;
+  --chip-ink: #11253f;
+  --chip-ink-dim: #5c7190;
+  --radius: 8px;
+
+  /* 封装几何：改一个数字，整张封装图等比重排 */
+  --pin-thick: 19px;
+  --pin-gap: 3px;
+  --pin-pitch: calc(var(--pin-thick) + var(--pin-gap));
+  --pin-per-side: 25;
+  /* 横竖分开：四边封装两者相等，两边封装（SOIC/TSSOP）横向没有引脚排，
+     本体宽度由 App.jsx 按能放下型号来定。 */
+  --span-x: calc(var(--pin-per-side) * var(--pin-pitch) - var(--pin-gap));
+  --span-y: var(--span-x);
+  --body-pad: 20px;
+  --body-w: calc(var(--span-x) + 2 * var(--body-pad));
+  --body-h: calc(var(--span-y) + 2 * var(--body-pad));
+  --lead: 68px;
+  --stage-w: calc(var(--body-w) + 2 * var(--lead));
+  --stage-h: calc(var(--body-h) + 2 * var(--lead));
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-width: 1080px;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+button, input { font: inherit; }
+button { color: inherit; }
+button:focus-visible, input:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  outline-offset: 2px;
+}
+
+.app-header {
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 26px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-strong);
+  box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.app-header > div:first-child { display: flex; align-items: baseline; gap: 16px; }
+.app-header h1 { margin: 0; font-size: 21px; letter-spacing: -0.02em; }
+.product-kicker, .source-badge span, .pinout-toolbar span {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.product-kicker { color: var(--accent); font-weight: 700; }
+
+.app-error-screen { min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: var(--bg); }
+.app-error-card { width: min(560px, 100%); padding: 28px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--panel-strong); box-shadow: 0 14px 40px rgb(26 54 93 / 0.12); }
+.app-error-card h1 { margin: 8px 0 10px; font-size: 24px; }
+.app-error-card p { margin: 0; color: var(--muted); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.app-error-card button { margin-top: 18px; min-height: 38px; padding: 0 14px; border: 0; border-radius: var(--radius); background: var(--accent); color: var(--accent-ink); cursor: pointer; font-weight: 650; }
+
+.header-tools { display: flex; align-items: center; gap: 24px; flex-shrink: 0; }
+.mcu-selector { width: 340px; min-width: 340px; display: grid; grid-template-columns: auto minmax(230px, 280px); align-items: center; column-gap: 9px; row-gap: 2px; }
+.mcu-selector > span { color: var(--muted); font-size: 11px; }
+.mcu-selector select { height: 35px; min-width: 230px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel-strong); color: var(--ink); font-size: 13px; font-weight: 650; }
+.mcu-selector small { grid-column: 2; color: var(--muted); font-size: 10px; }
+.mcu-selector > .mcu-browser-note { grid-column: 2; max-width: 280px; overflow-wrap: anywhere; }
+
+.source-badge { width: 180px; min-width: 180px; max-width: 180px; text-align: right; }
+.source-badge span, .source-badge strong { display: block; }
+.source-badge strong { max-height: 42px; margin-top: 3px; overflow: hidden; overflow-wrap: anywhere; font: 11px/1.25 "Cascadia Mono", Consolas, monospace; }
+
+/* 左栏里的助手入口条。助手本体在抽屉里，这里只交代"它是什么、上次做了什么"。 */
+.assistant-entry {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  margin: 0 0 16px;
+  padding: 9px 11px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 40%, var(--line-strong));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 5%, var(--panel-strong));
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.assistant-entry:hover { border-style: solid; border-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, var(--panel-strong)); }
+.assistant-entry-kicker { color: var(--accent); font: 700 10px "Cascadia Mono", Consolas, monospace; letter-spacing: 0.14em; }
+.assistant-entry strong { font-size: 14px; }
+.assistant-entry small { color: var(--muted); font-size: 11px; line-height: 1.45; }
+
+/*
+  抽屉里的助手：.sheet 已经给了内边距、背景和滚动，这里只清掉左栏时代的
+  边距和分隔线，顺便把因为窄栏而压缩过的东西放开——460px 里不必再挤。
+*/
+.ai-assistant.sheet { margin: 0; border-bottom: 0; }
+.ai-assistant.sheet .assistant-intro { max-width: none; }
+.ai-assistant.sheet .assistant-input { min-height: 108px; }
+.ai-assistant.sheet .module-chip-list { grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: none; }
+.assistant-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.assistant-heading span { color: var(--accent); font: 11px "Cascadia Mono", Consolas, monospace; letter-spacing: 0.14em; font-weight: 700; }
+.assistant-heading h2 { margin: 4px 0 0; font-size: 17px; }
+.assistant-heading small { padding: 3px 6px; border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--line)); border-radius: 4px; color: var(--accent); font: 10px "Cascadia Mono", Consolas, monospace; }
+.assistant-heading small.is-cloud { border-color: color-mix(in srgb, var(--eth) 48%, var(--line)); color: var(--eth); }
+.assistant-config { margin-top: 7px; }
+.assistant-config-toggle { padding: 0; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 10px; }
+.assistant-config-toggle:hover { color: var(--accent); }
+.assistant-config-panel { display: grid; gap: 7px; margin-top: 7px; padding: 8px; border: 1px solid var(--line); border-radius: 5px; background: color-mix(in srgb, var(--line) 16%, var(--panel-strong)); }
+.assistant-config-panel label { display: grid; gap: 3px; }
+.assistant-config-panel label > span { color: var(--muted); font-size: 10px; }
+.assistant-config-panel input { width: 100%; min-width: 0; height: 29px; padding: 0 7px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--panel-strong); color: var(--ink); font-size: 11px; }
+.assistant-config-panel p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.assistant-error { margin: 6px 0 0; color: var(--danger); font-size: 10px; line-height: 1.45; }
+.assistant-intro { margin: 8px 0 10px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.assistant-input { width: 100%; min-height: 84px; resize: vertical; padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel-strong); color: var(--ink); font-size: 12px; line-height: 1.5; }
+.assistant-input::placeholder { color: color-mix(in srgb, var(--muted) 72%, transparent); }
+.assistant-examples { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.assistant-examples > span { color: var(--muted); font-size: 10px; }
+.assistant-examples button { padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; font-size: 10px; }
+.assistant-examples button:hover { border-color: var(--accent); color: var(--accent); }
+.assistant-actions, .assistant-apply-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 9px; }
+.assistant-actions .primary-button, .assistant-apply-actions .primary-button { width: auto; min-height: 32px; margin-top: 0; padding: 0 11px; }
+.assistant-actions .secondary-button, .assistant-apply-actions .secondary-button { min-height: 32px; }
+.module-library { margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--line); }
+.module-library-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.module-library-heading strong { font-size: 12px; }
+.module-library-heading span { color: var(--muted); font-size: 10px; }
+.module-chip-list { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 7px; max-height: 164px; overflow: auto; }
+.module-chip { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 6px 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel-strong); color: var(--ink); text-align: left; cursor: pointer; }
+.module-chip:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--panel-strong)); }
+.module-chip span { overflow: hidden; max-width: 100%; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.module-chip small { color: var(--muted); font: 10px "Cascadia Mono", Consolas, monospace; }
+.assistant-result { margin-top: 13px; padding: 9px; border: 1px solid color-mix(in srgb, var(--accent) 33%, var(--line)); border-radius: var(--radius); background: color-mix(in srgb, var(--accent) 4%, var(--panel-strong)); }
+.assistant-result-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.assistant-result-heading strong { font-size: 11px; }
+.assistant-result-heading span { color: var(--muted); font: 10px "Cascadia Mono", Consolas, monospace; }
+.assistant-module-list { display: grid; gap: 5px; margin-top: 8px; }
+.assistant-module-card { padding: 6px 7px; border-left: 2px solid var(--accent); background: var(--panel-strong); }
+.assistant-module-card > div { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.assistant-module-card strong { font-size: 11px; }
+.assistant-module-card span { color: var(--accent); font-size: 10px; text-align: right; }
+.assistant-module-card small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.assistant-request-list { margin-top: 9px; }
+.assistant-subheading { color: var(--muted); font: 10px "Cascadia Mono", Consolas, monospace; }
+.assistant-request { display: grid; grid-template-columns: 64px 1fr auto; gap: 5px; align-items: baseline; padding: 5px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); font-size: 10px; }
+.assistant-request strong { color: var(--ink); }
+.assistant-request span { color: var(--muted); font-family: "Cascadia Mono", Consolas, monospace; }
+.assistant-request small { color: var(--accent); }
+.assistant-constraints { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.assistant-constraints span { padding: 3px 5px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 11%, var(--panel-strong)); color: var(--accent); font-size: 10px; }
+.assistant-warning { margin: 8px 0 0; color: color-mix(in srgb, var(--warn) 78%, var(--ink)); font-size: 10px; line-height: 1.5; }
+
+.workspace {
+  min-height: calc(100dvh - 76px);
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr) 360px;
+}
+
+.control-panel, .detail-panel { background: var(--panel); }
+/*
+  左栏拆成"滚动区 + 常驻操作条"两行：内容长度没有上限（外设导航一类就能上千
+  像素），但「生成方案」必须在任何滚动位置都点得到。滚动条归内层，外层只负责
+  分行——否则操作条会跟着内容一起滚走。
+*/
+.control-panel {
+  border-right: 1px solid var(--line);
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+.control-panel-scroll { min-height: 0; overflow-y: auto; padding: 18px 18px 28px; }
+.detail-panel { border-left: 1px solid var(--line); padding: 20px; overflow-y: auto; max-height: calc(100dvh - 76px); }
+.control-panel section + section { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 20px; }
+.control-panel-scroll > .peripheral-sidebar { border-top: 0; margin-top: 0; padding-top: 0; }
+.control-panel h2 { margin: 0; font-size: 16px; }
+.control-panel section > p { color: var(--muted); font-size: 13px; line-height: 1.55; margin: 7px 0 15px; }
+
+/* CubeMX-like navigation: categories stay compact, while the selected instance
+   opens a signal-first inspector below them. */
+.peripheral-sidebar { margin: 0 -2px; padding: 1px 2px 14px; border-bottom: 1px solid var(--line); }
+.sidebar-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.sidebar-heading span { color: var(--accent); font: 11px "Cascadia Mono", Consolas, monospace; letter-spacing: 0.14em; font-weight: 700; }
+.sidebar-heading strong { font-size: 16px; }
+.sidebar-hint { margin: 8px 0 12px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+
+/* 跨分类直搜。知道自己要 SPI3 的时候，展开分类再逐条扫是绕路。 */
+.peripheral-filter { position: relative; display: block; margin-bottom: 10px; }
+.peripheral-filter input { width: 100%; height: 31px; padding: 0 26px 0 9px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel-strong); color: var(--ink); font-size: 12px; }
+.peripheral-filter button { position: absolute; right: 2px; top: 50%; width: 22px; height: 22px; transform: translateY(-50%); border: 0; border-radius: 5px; background: transparent; color: var(--muted); font-size: 15px; line-height: 1; cursor: pointer; }
+.peripheral-filter button:hover { color: var(--ink); background: color-mix(in srgb, var(--line) 40%, transparent); }
+
+.peripheral-nav { border-top: 1px solid var(--line); }
+.peripheral-category + .peripheral-category { border-top: 1px solid var(--line); }
+/*
+  展开区自带滚动。H743 的 Connectivity 有 25 个实例，摊进外层滚动条意味着
+  下面的所有东西都被推走一千像素；关进自己的滚动区里，分类头和后续分类
+  始终留在视野内。
+*/
+/* padding-right 留给聚焦描边：overflow-y:auto 会把 overflow-x 也算成 auto，
+   贴边的 3px 描边会凭空多出一条横向滚动条。 */
+.category-items { max-height: 336px; overflow-y: auto; padding-right: 3px; }
+.peripheral-nav.is-flat .category-items { max-height: 420px; padding-left: 0; }
+/* 不占引脚的只读条目：能翻到，但不和真正可分配的外设争首屏。 */
+.peripheral-category.is-secondary .category-row { color: var(--muted); font-weight: 500; }
+.peripheral-category.is-secondary .category-row:hover { color: var(--accent); }
+.category-row { width: 100%; display: flex; align-items: center; justify-content: space-between; min-height: 43px; padding: 0 2px; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; font-size: 15px; font-weight: 600; }
+.category-row:hover { color: var(--accent); }
+.category-meta { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font: 12px "Cascadia Mono", Consolas, monospace; }
+.category-meta b { width: 14px; color: var(--muted); font-size: 20px; font-weight: 400; line-height: 1; }
+.category-items { display: grid; gap: 3px; padding: 2px 0 8px 9px; }
+.peripheral-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 37px; padding: 0 10px; border: 1px solid transparent; border-radius: 5px; background: transparent; text-align: left; cursor: pointer; font-size: 14px; }
+.peripheral-item:hover { border-color: var(--line-strong); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.peripheral-item.is-active { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); background: color-mix(in srgb, var(--accent) 13%, var(--panel-strong)); color: var(--accent); }
+.peripheral-item.is-static { color: var(--muted); }
+.peripheral-item small { flex: 0 0 auto; color: var(--muted); font: 11px "Cascadia Mono", Consolas, monospace; }
+.peripheral-item.is-active small { color: var(--accent); }
+.category-empty { padding: 6px 8px 8px; color: var(--muted); font-size: 12px; }
+.timer-mode-filter { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 9px 7px; border-left: 2px solid var(--accent); color: var(--muted); font-size: 11px; }
+.timer-mode-filter strong { color: var(--accent); font: 11px "Cascadia Mono", Consolas, monospace; }
+.peripheral-inspector { padding: 14px 2px 2px; }
+.peripheral-inspector-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.peripheral-inspector-heading span { color: var(--muted); font: 11px "Cascadia Mono", Consolas, monospace; }
+.peripheral-inspector-heading h2 { margin: 4px 0 0; font: 24px "Cascadia Mono", Consolas, monospace; }
+.peripheral-description { margin: 9px 0 14px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.timer-mode-panel { margin: 0 0 12px; padding: 9px 10px; border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line)); border-radius: 5px; background: color-mix(in srgb, var(--accent) 6%, var(--panel-strong)); }
+.timer-mode-panel-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.timer-mode-panel-heading span { color: var(--muted); font-size: 10px; }
+.timer-mode-panel-heading strong { color: var(--accent); font: 12px "Cascadia Mono", Consolas, monospace; }
+.timer-mode-panel p { margin: 6px 0 7px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.timer-mode-instances { display: flex; flex-wrap: wrap; gap: 4px; }
+.timer-mode-instances span { padding: 3px 6px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--panel-strong); color: var(--ink); font: 10px "Cascadia Mono", Consolas, monospace; }
+.timer-mode-instances small { color: var(--muted); font-size: 10px; }
+.peripheral-signal-list { display: grid; gap: 7px; max-height: 290px; overflow: auto; padding-right: 2px; }
+.peripheral-signal { padding: 7px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel-strong); }
+.signal-name { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.signal-name strong { color: var(--ink); font: 12px "Cascadia Mono", Consolas, monospace; }
+.signal-name small { color: var(--muted); font-size: 11px; }
+.candidate-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.candidate-list button { display: inline-flex; align-items: baseline; gap: 5px; min-height: 30px; padding: 3px 7px; border: 1px solid var(--line); border-radius: 4px; background: color-mix(in srgb, var(--line) 15%, transparent); cursor: pointer; font: 11px "Cascadia Mono", Consolas, monospace; }
+.candidate-list button:hover { border-color: var(--accent); color: var(--accent); }
+.candidate-list button small { color: var(--muted); font-size: 10px; }
+.peripheral-empty { margin: 14px 2px 0; padding: 12px 10px; border: 1px dashed var(--line-strong); border-radius: 5px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.peripheral-empty.compact { margin-top: 8px; }
+.fixed-button { min-height: 34px; padding: 0 10px; border: 1px solid var(--accent); border-radius: 5px; background: var(--accent); color: var(--accent-ink); cursor: pointer; font-size: 12px; font-weight: 650; }
+.fixed-button:hover { filter: brightness(1.06); }
+.pin.is-peripheral-focus { opacity: 1 !important; outline: 3px solid var(--accent); outline-offset: 1px; box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 20%, transparent); background: var(--focus-fill); border-color: var(--accent); color: var(--ink); z-index: 4; }
+
+.stepper-row, .toggle-row { display: flex; align-items: center; justify-content: space-between; min-height: 46px; font-size: 15px; }
+.stepper { display: grid; grid-template-columns: 29px 32px 29px; border: 1px solid var(--line-strong); border-radius: var(--radius); overflow: hidden; background: var(--panel-strong); }
+.stepper button { border: 0; background: transparent; cursor: pointer; font-weight: 650; }
+.stepper button:active { transform: translateY(1px); }
+.stepper output { display: grid; place-items: center; border-inline: 1px solid var(--line); font: 12px "Cascadia Mono", Consolas, monospace; }
+
+.toggle-row { justify-content: flex-start; gap: 9px; cursor: pointer; }
+.toggle-row input { position: absolute; opacity: 0; pointer-events: none; }
+.toggle-track { width: 30px; height: 18px; padding: 2px; flex: 0 0 auto; border: 1px solid var(--line-strong); border-radius: 12px; background: color-mix(in srgb, var(--line) 80%, var(--panel-strong)); transition: background 140ms ease; }
+.toggle-track span { display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--panel-strong); box-shadow: 0 1px 2px rgb(11 21 36 / 0.35); transition: transform 140ms ease; }
+.toggle-row input:checked + .toggle-track { background: var(--accent); border-color: var(--accent); }
+.toggle-row input:checked + .toggle-track span { transform: translateX(12px); }
+
+.primary-button, .secondary-button, .danger-button {
+  border-radius: var(--radius);
+  min-height: 39px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-weight: 650;
+}
+.primary-button { width: 100%; margin-top: 24px; background: var(--accent); color: var(--accent-ink); }
+.primary-button:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
+.primary-button:disabled { opacity: 0.55; cursor: progress; }
+.primary-button.is-stale { background: var(--warn); color: var(--warn-ink); }
+.primary-button:active, .secondary-button:active, .danger-button:active { transform: translateY(1px); }
+.secondary-button, .danger-button { min-height: 32px; padding: 0 10px; background: transparent; }
+.secondary-button { border-color: var(--line-strong); }
+.danger-button { border-color: var(--danger); color: var(--danger); }
+
+/*
+  常驻操作条。「分配规则」和「图例」是设完就不再动的东西，收进折叠里；
+  展开时向上长，主按钮永远贴在最下面——手不用重新找位置。
+*/
+.control-panel-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 11px 18px 14px;
+  border-top: 1px solid var(--line-strong);
+  background: var(--panel-strong);
+  box-shadow: 0 -8px 20px rgb(var(--shadow) / 0.10);
+}
+.action-summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.action-disclosures { display: flex; gap: 6px; }
+.action-disclosure {
+  min-height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+.action-disclosure:hover { border-color: var(--line-strong); color: var(--ink); }
+.action-disclosure.is-open { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); background: color-mix(in srgb, var(--accent) 9%, transparent); color: var(--accent); }
+.action-rules { display: grid; padding: 2px 2px 4px; border-top: 1px solid var(--line); }
+.action-rules .toggle-row { min-height: 38px; font-size: 13px; }
+.control-panel-actions .legend { margin-top: 0; padding-top: 8px; border-top: 1px solid var(--line); }
+.control-panel-actions .primary-button { margin-top: 0; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 10px 13px; margin-top: 20px; color: var(--muted); font-size: 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 8px; height: 8px; border-radius: 2px; }
+.legend-spi { background: var(--spi); } .legend-i2c { background: var(--i2c); }
+.legend-uart { background: var(--uart); } .legend-protected { background: var(--protected); }
+.legend-excluded { background: var(--danger); } .legend-fdcan { background: var(--fdcan); }
+.legend-sdmmc { background: var(--sdmmc); } .legend-quadspi { background: var(--quadspi); }
+.legend-usb { background: var(--usb); } .legend-eth { background: var(--eth); }
+.legend-timer { background: var(--timer); } .legend-analog { background: var(--analog); }
+
+/* 接口需求列表：一行 = 一路接口 */
+.section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.section-count { font: 11px "Cascadia Mono", Consolas, monospace; color: var(--muted); }
+.section-count.is-over { color: var(--danger); font-weight: 600; }
+.request-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.request-row { border: 1px solid var(--line); border-left: 3px solid var(--line-strong); border-radius: var(--radius); background: var(--panel-strong); padding: 8px 10px; }
+.request-head { display: flex; align-items: center; gap: 8px; }
+.request-index { width: 18px; height: 18px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--chip-2); color: var(--chip-ink-dim); font: 11px "Cascadia Mono", Consolas, monospace; }
+.request-head select { flex: 1; min-width: 0; height: 30px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); font-weight: 600; padding: 0 6px; }
+.request-remove { width: 24px; height: 24px; flex: none; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 17px; line-height: 1; cursor: pointer; }
+.request-remove:hover { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+.request-body { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.request-body label { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.request-body span { font-size: 10px; color: var(--muted); }
+.request-body select { width: 100%; min-width: 0; height: 28px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); font-size: 12px; padding: 0 4px; }
+.request-add { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 10px; }
+.request-add span { font-size: 11px; color: var(--muted); margin-right: 2px; }
+.request-add button { height: 24px; padding: 0 8px; border: 1px dashed var(--line-strong); border-radius: 6px; background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; }
+.request-add button:hover { border-style: solid; border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+
+.request-spi { border-left-color: var(--spi); } .request-i2c { border-left-color: var(--i2c); }
+.request-uart { border-left-color: var(--uart); } .request-fdcan { border-left-color: var(--fdcan); }
+.request-sdmmc { border-left-color: var(--sdmmc); } .request-quadspi { border-left-color: var(--quadspi); }
+.request-usb { border-left-color: var(--usb); } .request-eth { border-left-color: var(--eth); }
+.request-timer { border-left-color: var(--timer); } .request-analog { border-left-color: var(--analog); }
+
+/* 5V 电平是硬约束，用勾选框而不是下拉——它是"是/否"，不是"选一个"。 */
+.request-flag .request-flag-box { display: flex; align-items: center; gap: 5px; height: 28px; padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.request-flag input { margin: 0; accent-color: var(--danger); }
+.request-flag b { font: 600 11px "Segoe UI Variable", system-ui, sans-serif; color: var(--muted); }
+.request-flag:has(input:checked) .request-flag-box { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, var(--panel)); }
+.request-flag:has(input:checked) b { color: var(--danger); }
+
+/* 导出格式下拉 */
+.export-menu { position: relative; }
+.export-options { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; display: flex; flex-direction: column; min-width: 168px; padding: 4px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel-strong); box-shadow: 0 8px 24px rgb(17 37 63 / 0.16); }
+.export-options button { padding: 7px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--ink); font-size: 12px; text-align: left; cursor: pointer; }
+.export-options button:hover { background: var(--chip-1); }
+
+.pinout-panel { min-width: 0; overflow: auto; padding: 18px 22px 30px; }
+.pinout-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.pinout-toolbar > div span, .pinout-toolbar > div strong { display: block; }
+.pinout-toolbar > div strong { margin-top: 3px; font: 12px "Cascadia Mono", Consolas, monospace; }
+.pinout-toolbar input { width: 280px; height: 36px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel-strong); color: var(--ink); }
+
+/*
+  封装图几何（LQFP = 正方形，每边 25 脚）
+  纵向引脚列只占据芯片本体的高度区间，横向引脚排只占据宽度区间，
+  四个角落因此天然留空，不会互相压在一起。
+      x:  0 ── lead ──┬── span ──┬── lead ── stage
+      y:  0 ── lead ──┼──────────┤
+                lead  │ chip body│
+*/
+.package-stage {
+  position: relative;
+  width: var(--stage-w);
+  height: var(--stage-h);
+  margin: 4px auto 0;
+}
+.chip-body {
+  position: absolute;
+  left: var(--lead);
+  top: var(--lead);
+  width: var(--body-w);
+  height: var(--body-h);
+  display: grid;
+  place-content: center;
+  text-align: center;
+  background: linear-gradient(148deg, var(--chip-1) 0%, var(--chip-2) 52%, var(--chip-3) 100%);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--chip-ink);
+  box-shadow:
+    inset 0 1px 0 rgb(var(--stage-gloss) / var(--gloss-inset)),
+    inset 0 0 60px rgb(99 130 214 / 0.10),
+    0 16px 38px rgb(56 87 128 / 0.18);
+}
+.chip-body span { color: var(--chip-ink-dim); font-size: 12px; letter-spacing: 0.06em; }
+.chip-body strong { margin-top: 11px; font: var(--chip-title-size, 27px) "Cascadia Mono", Consolas, monospace; letter-spacing: 0.04em; }
+.chip-body small { margin-top: 9px; color: var(--chip-ink-dim); font: 12px "Cascadia Mono", Consolas, monospace; }
+.pin-one {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--chip-gloss), var(--accent));
+  box-shadow: 0 0 0 4px rgb(37 99 235 / 0.18);
+}
+
+/* 每条边的长度 = 对应方向的 span，起点 = lead + body-pad，与芯片本体的边严格对齐 */
+.pin-side { position: absolute; display: flex; gap: var(--pin-gap); }
+.pin-side-top, .pin-side-bottom {
+  left: calc(var(--lead) + var(--body-pad));
+  width: var(--span-x);
+  height: var(--lead);
+}
+.pin-side-top { top: 0; align-items: flex-end; }
+.pin-side-bottom { bottom: 0; align-items: flex-start; }
+.pin-side-left, .pin-side-right {
+  top: calc(var(--lead) + var(--body-pad));
+  height: var(--span-y);
+  width: var(--lead);
+  flex-direction: column;
+}
+.pin-side-left { left: 0; align-items: flex-end; }
+.pin-side-right { right: 0; align-items: flex-start; }
+
+/* BGA / WLCSP：没有引线框，只有球阵。左边一列行标、上面一行列号，
+   否则几百个球读不出位置。 */
+.package-grid { width: auto; height: auto; padding: 14px; border: 1px solid var(--line-strong); border-radius: 8px; background: linear-gradient(148deg, var(--chip-1) 0%, var(--chip-2) 52%, var(--chip-3) 100%); }
+.ball-grid-title { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; color: var(--chip-ink); }
+.ball-grid-title strong { font: var(--chip-title-size, 27px) "Cascadia Mono", Consolas, monospace; letter-spacing: 0.04em; }
+.ball-grid-title small { color: var(--chip-ink-dim); font: 12px "Cascadia Mono", Consolas, monospace; }
+.ball-grid {
+  display: grid;
+  grid-template-columns: auto repeat(var(--grid-columns), var(--pin-thick));
+  gap: var(--pin-gap);
+  align-items: center;
+  justify-items: center;
+}
+.ball-grid .pin { width: var(--pin-thick); height: var(--pin-thick); flex-direction: column; padding: 0; border-radius: 50%; overflow: hidden; }
+.ball-grid .pin span { font-size: calc(var(--pin-font-size, 10px) - 2px); line-height: 1; }
+.ball-grid .pin small { display: none; }
+.ball-empty { width: var(--pin-thick); height: var(--pin-thick); }
+.ball-grid-corner { width: 100%; }
+.ball-grid-column-label, .ball-grid-row-label { color: var(--chip-ink-dim); font: var(--pin-number-size, 9px) "Cascadia Mono", Consolas, monospace; }
+.ball-grid-row-label { padding-right: 4px; }
+
+.pin {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: var(--lead);
+  height: var(--pin-thick);
+  padding: 0 var(--pin-padding, 5px);
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  background: var(--panel-strong);
+  color: var(--ink);
+  cursor: pointer;
+  font: var(--pin-font-size, 10px) "Cascadia Mono", Consolas, monospace;
+  transition: opacity 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+/* 物理脚号一律靠近芯片本体一侧 */
+.pin-side-right .pin { flex-direction: row-reverse; }
+.pin-side-top .pin, .pin-side-bottom .pin {
+  width: var(--pin-thick);
+  height: var(--lead);
+  padding: var(--pin-padding, 5px) 0;
+  flex-direction: column;
+}
+.pin-side-bottom .pin { flex-direction: column-reverse; }
+.pin-side-top .pin span, .pin-side-bottom .pin span { writing-mode: vertical-rl; }
+.pin span { overflow: hidden; }
+.pin small { color: var(--muted); font: var(--pin-number-size, 9px) "Cascadia Mono", Consolas, monospace; }
+.pin:hover { border-color: var(--accent); box-shadow: 0 0 0 2px rgb(37 99 235 / 0.18); z-index: 2; }
+.pin:active { transform: translateY(1px); }
+.pin.is-selected { outline: 3px solid color-mix(in srgb, var(--accent) 42%, transparent); border-color: var(--accent); z-index: 3; }
+.pin.is-dimmed { opacity: 0.22; }
+/* 已分配引脚：每个协议只声明自己的色调，配色规则写一次。 */
+.pin-spi { --tone: var(--spi); } .pin-i2c { --tone: var(--i2c); }
+.pin-uart { --tone: var(--uart); } .pin-fdcan { --tone: var(--fdcan); }
+.pin-sdmmc { --tone: var(--sdmmc); } .pin-quadspi { --tone: var(--quadspi); }
+.pin-usb { --tone: var(--usb); } .pin-eth { --tone: var(--eth); }
+.pin-timer { --tone: var(--timer); } .pin-analog { --tone: var(--analog); }
+.pin.is-assigned {
+  background: color-mix(in srgb, var(--tone) 26%, var(--panel-strong));
+  border-color: var(--tone);
+  color: color-mix(in srgb, var(--tone) 78%, var(--ink));
+}
+.pin.is-assigned small { color: inherit; opacity: 0.7; }
+.pin-protected { background: color-mix(in srgb, var(--protected) 16%, var(--panel-strong)); border-color: var(--protected); border-style: dashed; }
+.pin-excluded { background: color-mix(in srgb, var(--danger) 20%, var(--panel-strong)); color: var(--danger); border-color: var(--danger); text-decoration: line-through; }
+.pin-excluded small { color: inherit; }
+.pin-fixed { background: color-mix(in srgb, var(--fixed) 20%, var(--panel-strong)); color: var(--muted); border-color: color-mix(in srgb, var(--fixed) 55%, transparent); }
+
+.empty-state, .error-state, .warn-state { padding: 18px; border: 1px dashed var(--line-strong); border-radius: var(--radius); color: var(--muted); font-size: 13px; line-height: 1.6; }
+.empty-state.compact { padding: 14px; }
+.error-state, .warn-state { border-style: solid; }
+.error-state { border-color: color-mix(in srgb, var(--danger) 55%, var(--line)); color: var(--danger); background: color-mix(in srgb, var(--danger) 6%, var(--panel)); }
+.warn-state { border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); color: color-mix(in srgb, var(--warn) 72%, var(--ink)); background: color-mix(in srgb, var(--warn) 8%, var(--panel)); }
+.error-state p, .warn-state p { margin: 5px 0 0; }
+.warn-state b { color: color-mix(in srgb, var(--warn) 85%, var(--ink)); }
+
+.empty-state.solving { display: flex; align-items: center; gap: 10px; border-style: solid; border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--accent); }
+.spinner { width: 14px; height: 14px; flex: 0 0 auto; border: 2px solid color-mix(in srgb, var(--accent) 28%, transparent); border-top-color: var(--accent); border-radius: 50%; animation: spin 620ms linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.stale-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; padding: 8px 10px; border-radius: var(--radius); border: 1px solid color-mix(in srgb, var(--warn) 50%, var(--line)); background: color-mix(in srgb, var(--warn) 10%, var(--panel)); color: color-mix(in srgb, var(--warn) 75%, var(--ink)); font-size: 11px; line-height: 1.5; }
+.stale-banner button { flex: 0 0 auto; border: 0; border-radius: 5px; padding: 5px 9px; background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 650; cursor: pointer; }
+.notice-warn { background: color-mix(in srgb, var(--warn) 10%, var(--panel)); border-left-color: var(--warn); }
+
+/* 结果过期时，封装图上的着色也一并降饱和，避免被当成当前有效方案 */
+.package-stage.is-stale .pin.is-assigned { filter: saturate(0.3); opacity: 0.65; }
+.package-stage.is-stale .pin.is-peripheral-focus { filter: none; opacity: 1; }
+.peripheral-focus-banner { position: absolute; z-index: 5; top: calc(var(--lead) + 12px); left: calc(var(--lead) + var(--body-pad) + 14px); display: flex; align-items: baseline; gap: 9px; padding: 7px 10px; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line)); border-radius: 5px; background: var(--legend-bg); color: var(--ink); box-shadow: 0 4px 14px rgb(56 87 128 / 0.12); }
+.peripheral-focus-banner span { color: var(--accent); font-size: 11px; font-weight: 650; }
+.peripheral-focus-banner strong { font: 13px "Cascadia Mono", Consolas, monospace; }
+.peripheral-focus-banner small { color: var(--muted); font-size: 11px; }
+.peripheral-focus-clear { min-height: 25px; padding: 2px 7px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--panel-strong); color: var(--muted); cursor: pointer; font-size: 11px; }
+.peripheral-focus-clear:hover { border-color: var(--accent); color: var(--accent); }
+/*
+  右栏检视区的互斥切换。引脚详情和外设详情是同一块面积上的两件事，
+  叠着放会把下面的求解结果推出视野；标签页把"现在看的是谁"写在明面上。
+*/
+.detail-tabs { display: flex; gap: 4px; margin-bottom: 14px; padding: 3px; border: 1px solid var(--line); border-radius: 999px; background: color-mix(in srgb, var(--line) 22%, transparent); }
+.detail-tabs button {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 27px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease;
+}
+.detail-tabs button:hover { color: var(--ink); }
+.detail-tabs button.is-active { background: var(--panel-strong); color: var(--accent); box-shadow: 0 1px 3px rgb(var(--shadow) / 0.14); }
+/* 挪进右栏后不再需要左栏那套上边距，标签页已经把它和上文隔开了 */
+.detail-panel .peripheral-inspector { padding-top: 0; }
+
+.inspector-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.inspector-heading span { color: var(--muted); font: 10px "Cascadia Mono", Consolas, monospace; }
+.inspector-heading h2 { margin: 3px 0 0; font: 24px "Cascadia Mono", Consolas, monospace; }
+.pin-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 16px 0; }
+.pin-meta div { min-width: 0; }
+.pin-meta dt { color: var(--muted); font-size: 10px; }
+.pin-meta dd { margin: 3px 0 0; overflow-wrap: anywhere; font: 10px "Cascadia Mono", Consolas, monospace; }
+.notice { margin: 0 0 12px; padding: 8px 10px; background: color-mix(in srgb, var(--protected) 9%, var(--panel)); border-left: 3px solid var(--protected); font-size: 11px; }
+.function-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; max-height: 215px; overflow: auto; }
+.function-row { min-width: 0; display: flex; justify-content: space-between; gap: 6px; padding: 6px 7px; border-left: 2px solid var(--line-strong); background: color-mix(in srgb, var(--line) 20%, transparent); font: 9px "Cascadia Mono", Consolas, monospace; }
+.function-row span { overflow-wrap: anywhere; }
+.function-row b { color: var(--muted); }
+.function-spi { border-color: var(--spi); } .function-i2c { border-color: var(--i2c); }
+.function-uart { border-color: var(--uart); } .function-timer { border-color: var(--timer); }
+.function-analog { border-color: var(--analog); }
+.additional-functions { margin-top: 14px; }
+.additional-functions h3 { margin: 0 0 5px; font-size: 11px; }
+.additional-functions p, .muted { margin: 0; color: var(--muted); font: 10px/1.5 "Cascadia Mono", Consolas, monospace; }
+.result-divider { border-top: 1px solid var(--line); margin: 22px 0; }
+.solution-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.solution-tabs { display: flex; gap: 3px; flex-wrap: wrap; }
+.solution-tabs button, .text-button { border: 0; background: transparent; cursor: pointer; }
+.solution-tabs button { padding: 5px 7px; border-radius: 4px; color: var(--muted); font-size: 11px; }
+.solution-tabs button.active { background: var(--accent); color: var(--accent-ink); }
+.text-button { color: var(--accent); padding: 3px; font-size: 11px; white-space: nowrap; }
+.text-button:hover { text-decoration: underline; }
+.solver-meta { color: var(--muted); font-size: 10px; line-height: 1.5; }
+.solution-groups { display: grid; gap: 9px; }
+.solution-group { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-strong); overflow: hidden; }
+.solution-group header { display: flex; align-items: center; justify-content: space-between; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+.solution-group header div { display: flex; align-items: baseline; gap: 8px; }
+.solution-group header span { color: var(--muted); font-size: 10px; }
+.solution-group header strong { font: 13px "Cascadia Mono", Consolas, monospace; }
+.assignment { display: grid; grid-template-columns: 58px 55px 1fr; gap: 6px; align-items: center; padding: 6px 10px; font: 10px "Cascadia Mono", Consolas, monospace; }
+.assignment + .assignment { border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.assignment span { color: var(--muted); }
+.assignment small { color: var(--muted); text-align: right; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+/* 工程存取：保存 / 载入 / 重置 */
+.project-tools { display: flex; align-items: center; gap: 5px; }
+.project-tools > span { color: var(--muted); font-size: 11px; margin-right: 2px; }
+.project-tools button { height: 27px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel-strong); color: var(--ink); font-size: 11px; font-weight: 600; cursor: pointer; }
+.project-tools button:hover { border-color: var(--accent); color: var(--accent); }
+
+.project-notice { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 20px 10px; padding: 7px 10px; border-radius: var(--radius); border-left: 3px solid var(--ok); background: color-mix(in srgb, var(--ok) 9%, var(--panel)); font-size: 11px; line-height: 1.5; }
+.project-notice-warn { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--panel)); }
+.project-notice-error { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 9%, var(--panel)); }
+.project-notice button { flex: none; border: 0; background: transparent; color: var(--muted); font-size: 15px; line-height: 1; cursor: pointer; }
+
+.pin-meta .is-tolerant { color: var(--ok); font-weight: 650; }
+.pin-meta .is-intolerant { color: var(--danger); font-weight: 650; }
+
+/* 方案对比：评审要回答的是"相比上一版改了什么" */
+.diff-panel { margin-top: 4px; }
+.diff-mode { display: flex; gap: 3px; }
+.diff-mode button { padding: 4px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; }
+.diff-mode button.active { background: var(--accent); color: var(--accent-ink); }
+.diff-mode button:disabled { opacity: 0.4; cursor: not-allowed; }
+.diff-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
+.diff-controls label { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.diff-controls span { color: var(--muted); font-size: 10px; }
+.diff-controls select { width: 100%; min-width: 0; height: 28px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); font-size: 12px; padding: 0 4px; }
+.diff-baseline { display: grid; gap: 7px; margin: 8px 0; }
+.diff-baseline input[type="file"] { display: none; }
+.diff-baseline-info { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; }
+.diff-baseline-info strong { font: 11px "Cascadia Mono", Consolas, monospace; overflow-wrap: anywhere; }
+.diff-summary { margin: 8px 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.diff-subheading { margin-bottom: 5px; color: var(--muted); font-size: 10px; }
+.diff-requests { margin: 8px 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-strong); }
+.diff-request { display: grid; grid-template-columns: auto 1fr 34px; gap: 6px; align-items: baseline; padding: 3px 0; font-size: 10px; }
+.diff-request span { color: var(--muted); }
+.diff-request b { font: 10px "Cascadia Mono", Consolas, monospace; overflow-wrap: anywhere; }
+.diff-request small { text-align: right; font-size: 9px; }
+.diff-groups { display: grid; gap: 8px; }
+.diff-group { border: 1px solid var(--line); border-left: 3px solid var(--line-strong); border-radius: var(--radius); background: var(--panel-strong); overflow: hidden; }
+.diff-group-added { border-left-color: var(--ok); }
+.diff-group-removed { border-left-color: var(--danger); }
+.diff-group-changed { border-left-color: var(--warn); }
+.diff-group header { display: flex; align-items: baseline; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+.diff-group header strong { font: 12px "Cascadia Mono", Consolas, monospace; }
+.diff-group header span { flex: 1; color: var(--muted); font-size: 10px; }
+.diff-group header small { color: var(--muted); font-size: 10px; }
+.diff-signal { display: grid; grid-template-columns: 1fr auto 34px; gap: 6px; align-items: center; padding: 5px 10px; font: 10px "Cascadia Mono", Consolas, monospace; }
+.diff-signal + .diff-signal { border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.diff-signal span { color: var(--muted); overflow-wrap: anywhere; }
+.diff-signal i { color: var(--muted); font-style: normal; }
+.diff-signal small { text-align: right; font-size: 9px; }
+.diff-moved small { color: var(--warn); }
+.diff-added small { color: var(--ok); }
+.diff-removed small { color: var(--danger); }
+.diff-removed b { text-decoration: line-through; opacity: 0.75; }
+
+@media (max-width: 1320px) {
+  .workspace { grid-template-columns: 300px minmax(0, 1fr) 330px; }
+  .pinout-panel { padding-inline: 10px; }
+}
+
+/* 大屏放大封装图：只需调整几何变量 */
+@media (min-width: 1560px) {
+  :root { --pin-thick: 22px; --pin-gap: 4px; --body-pad: 24px; --lead: 80px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+}
+
+/* 器件浏览器：下拉之外的"从三千多个型号里搜一颗"。绝对定位浮在顶栏之上，
+   避免撑开布局把整个工作区往下顶。 */
+.mcu-selector { position: relative; }
+.mcu-selector .linklike { border: 0; background: none; padding: 0; color: var(--accent); font-size: 11px; cursor: pointer; text-decoration: underline; }
+.mcu-browser { position: absolute; top: 100%; right: 0; z-index: 40; width: 340px; margin-top: 6px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel-strong); box-shadow: 0 12px 32px rgb(0 0 0 / 28%); }
+.mcu-browser input { width: 100%; height: 32px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel); color: var(--ink); font-size: 13px; }
+.mcu-browser-note { margin: 7px 2px 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.mcu-browser-note.error { color: var(--danger); }
+.mcu-browser-note.warn { color: var(--warn); }
+.mcu-browser-note.ok { color: var(--muted); }
+.mcu-browser-list { max-height: 300px; margin: 6px 0 0; padding: 0; overflow-y: auto; list-style: none; }
+.mcu-browser-list button { display: grid; grid-template-columns: 1fr auto; gap: 1px 8px; width: 100%; padding: 6px 8px; border: 0; border-radius: 6px; background: none; color: var(--ink); text-align: left; cursor: pointer; }
+.mcu-browser-list button:hover { background: var(--panel); }
+.mcu-browser-list strong { font-size: 12px; font-weight: 650; }
+.mcu-browser-list span { color: var(--muted); font-size: 11px; }
+.mcu-browser-list em { grid-column: 1 / -1; color: var(--muted); font-size: 10px; font-style: normal; }
+
+/*
+  Visual refresh: a calm technical-instrument language for the dense planner.
+  The DOM and interaction model stay unchanged; this layer only improves
+  hierarchy, spacing, surface contrast, and state visibility.
+*/
+:root {
+  --bg: #edf3f8;
+  --panel: #f8fbff;
+  --panel-strong: #ffffff;
+  --ink: #122740;
+  --muted: #5a708b;
+  --line: #d4dfeb;
+  --line-strong: #9bb0c8;
+  --accent: #1d62d3;
+  --chip-1: #f1f6fd;
+  --chip-2: #e4edf9;
+  --chip-3: #d9e6f5;
+  --chip-ink: #17375f;
+  --chip-ink-dim: #5c7697;
+  --radius: 9px;
+
+  /* 原先散落在各处的硬编码色，收进变量才能被暗色主题覆盖 */
+  --scroll-thumb: #aebfd2;
+  --focus-fill: #fff8c7;      /* 外设聚焦时的引脚高亮底色 */
+  --chip-gloss: #b9cdf7;      /* 封装体第一脚圆点的高光 */
+  --warn-ink: #241300;        /* 压在 --warn 上的文字 */
+  --shadow: 35 74 124;        /* 阴影基色（rgb 分量，配 / alpha 用） */
+  --stage-gloss: 255 255 255; /* 封装体内侧高光 */
+  /* 表单控件底色。必须与 --panel 分开：接口需求里的下拉和复选框要比所在面板
+     再亮一点（暗色下是再暗一点）才有"可输入"的观感，直接复用 --panel 会糊成
+     一片。 */
+  --field-bg: #f9fbfe;
+  --hover-bg: #eef4fb;        /* 菜单项 hover */
+  --panel-tint: #e5edf6;      /* 叠在 --panel 上的极淡分层色 */
+
+  /*
+    高光强度。亮色下用近乎不透明的白把边缘"打亮"，暗色下同样的白会变成刺眼的
+    白边——所以颜色和强度都要能被主题覆盖，而不是写死 rgb(255 255 255 / 0.9)。
+    三处用到：引脚图区域的左右边缘、封装体顶边、图例底色。
+  */
+  --gloss-edge-l: 0.42;       /* 引脚图左边缘 */
+  --gloss-edge-r: 0.25;       /* 引脚图右边缘 */
+  --gloss-inset: 0.92;        /* 封装体顶边内高光 */
+  --legend-bg: rgb(255 255 255 / 0.56);
+}
+
+body {
+  background: var(--bg);
+  letter-spacing: 0.005em;
+}
+
+#root { min-height: 100dvh; }
+
+.app-header {
+  height: 82px;
+  padding: 0 30px;
+  border-bottom-color: var(--line-strong);
+  box-shadow: 0 7px 22px rgb(40 70 112 / 0.07), inset 0 -3px 0 color-mix(in srgb, var(--accent) 78%, transparent);
+}
+
+.app-header > div:first-child { gap: 14px; }
+.app-header h1 { font-size: 22px; font-weight: 720; letter-spacing: -0.028em; }
+.product-kicker { letter-spacing: 0.16em; }
+.header-tools { gap: 18px; }
+.mcu-selector select,
+.project-tools button,
+.pinout-toolbar input,
+.mcu-browser input,
+.request-head select,
+.request-body select,
+.diff-controls select {
+  border-color: var(--line-strong);
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+.mcu-selector select:hover,
+.project-tools button:hover,
+.pinout-toolbar input:hover,
+.mcu-browser input:hover,
+.request-head select:hover,
+.request-body select:hover,
+.diff-controls select:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line-strong));
+}
+.mcu-selector select:focus,
+.pinout-toolbar input:focus,
+.mcu-browser input:focus,
+.request-head select:focus,
+.request-body select:focus,
+.diff-controls select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.source-badge strong { color: var(--ink); }
+
+.workspace {
+  min-height: calc(100dvh - 82px);
+  background: var(--bg);
+}
+
+.control-panel,
+.detail-panel {
+  background: color-mix(in srgb, var(--panel) 95%, var(--panel-tint));
+}
+.control-panel {
+  max-height: calc(100dvh - 82px);
+  border-right-color: var(--line);
+  box-shadow: 8px 0 24px rgb(51 83 126 / 0.04);
+}
+/* 内边距归滚动区，否则底部操作条会跟着缩进、贴不住栏边 */
+.control-panel-scroll { padding: 22px 20px 28px; }
+.control-panel-actions { padding-inline: 20px; }
+.detail-panel {
+  max-height: calc(100dvh - 82px);
+  padding: 22px 22px 32px;
+  border-left-color: var(--line);
+  box-shadow: -8px 0 24px rgb(51 83 126 / 0.04);
+}
+.control-panel section + section { margin-top: 24px; padding-top: 22px; border-top-color: var(--line); }
+.control-panel h2 { font-size: 17px; letter-spacing: -0.01em; }
+.control-panel section > p { color: var(--muted); }
+
+/* 助手搬进抽屉后不再需要抵消左栏的负边距——内外边距都由 .sheet 给。 */
+.assistant-heading h2 { font-size: 18px; }
+.assistant-heading small { border-radius: 999px; padding-inline: 8px; background: color-mix(in srgb, var(--accent) 7%, var(--panel-strong)); }
+.assistant-intro { max-width: 30ch; }
+.assistant-input { min-height: 92px; background: var(--panel-strong); box-shadow: inset 0 1px 2px rgb(25 54 91 / 0.04); }
+.assistant-examples button,
+.module-chip,
+.request-add button { transition: border-color 140ms ease, color 140ms ease, background 140ms ease, transform 140ms ease; }
+.assistant-examples button:active,
+.module-chip:active,
+.request-add button:active { transform: translateY(1px); }
+.module-chip { border-radius: 8px; padding: 8px 9px; background: var(--panel-strong); }
+.module-chip:hover { box-shadow: 0 3px 10px rgb(35 74 124 / 0.08); }
+.assistant-result { box-shadow: 0 5px 16px rgb(35 74 124 / 0.06); }
+
+.peripheral-sidebar { margin-inline: 0; padding: 2px 0 16px; border-bottom-color: var(--line); }
+.sidebar-heading strong { font-size: 17px; }
+.sidebar-hint { max-width: 31ch; }
+.peripheral-nav { border-top-color: var(--line); }
+.peripheral-category + .peripheral-category { border-top-color: var(--line); }
+.category-row { min-height: 45px; padding-inline: 5px; }
+.category-row:hover { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+.category-items { gap: 4px; padding-left: 8px; }
+.peripheral-item {
+  min-height: 39px;
+  padding-inline: 11px;
+  border-radius: 8px;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease, transform 140ms ease;
+}
+.peripheral-item:active { transform: translateY(1px); }
+.peripheral-item.is-active {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
+  box-shadow: inset 3px 0 0 var(--accent), 0 3px 10px rgb(35 74 124 / 0.06);
+}
+.peripheral-inspector { padding-top: 17px; }
+.peripheral-inspector-heading h2 { font-size: 25px; }
+.peripheral-signal { border-radius: 8px; background: var(--panel-strong); box-shadow: 0 2px 8px rgb(35 74 124 / 0.04); }
+.candidate-list button { border-radius: 7px; background: color-mix(in srgb, var(--line) 12%, var(--panel-strong)); transition: border-color 140ms ease, color 140ms ease, background 140ms ease; }
+.fixed-button { border-radius: 8px; box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 18%, transparent); }
+
+.request-row {
+  border-color: var(--line);
+  box-shadow: 0 3px 10px rgb(35 74 124 / 0.045);
+}
+.request-head select,
+.request-body select,
+.request-flag .request-flag-box { background: var(--field-bg); }
+.request-add button { border-color: var(--line-strong); }
+
+.pinout-panel {
+  position: relative;
+  max-height: calc(100dvh - 82px);
+  padding: 22px 26px 36px;
+  background: var(--bg);
+  background-image: linear-gradient(90deg, rgb(var(--stage-gloss) / var(--gloss-edge-l)), transparent 22%, transparent 78%, rgb(var(--stage-gloss) / var(--gloss-edge-r)));
+}
+.pinout-toolbar {
+  margin-bottom: 16px;
+  padding: 0 4px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.pinout-toolbar > div strong { color: var(--ink); }
+.pinout-toolbar input {
+  width: 300px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--panel-strong);
+  box-shadow: 0 3px 12px rgb(35 74 124 / 0.05);
+}
+.package-stage { margin-top: 8px; }
+.chip-body {
+  border-radius: 11px;
+  box-shadow: inset 0 1px 0 rgb(var(--stage-gloss) / var(--gloss-inset)), inset 0 0 60px rgb(99 130 214 / 0.09), 0 20px 46px rgb(56 87 128 / 0.16);
+}
+.pin { border-radius: 5px; font-weight: 600; }
+.pin:hover { box-shadow: 0 0 0 3px rgb(37 99 235 / 0.14); }
+.pin.is-assigned { box-shadow: inset 2px 0 0 var(--tone); }
+.peripheral-focus-banner { border-radius: 9px; box-shadow: 0 8px 20px rgb(35 74 124 / 0.12); }
+.legend { margin-top: 24px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 9px; background: var(--legend-bg); }
+
+.detail-panel .inspector-heading h2 { font-size: 26px; }
+.function-grid { gap: 6px; }
+.function-row { padding: 8px 9px; border: 1px solid var(--line); border-left-width: 3px; border-radius: 7px; background: var(--panel-strong); box-shadow: 0 2px 7px rgb(35 74 124 / 0.04); }
+.solution-group { border-color: var(--line); box-shadow: 0 3px 10px rgb(35 74 124 / 0.045); }
+.solution-tabs button,
+.diff-mode button { border-radius: 7px; transition: background 140ms ease, color 140ms ease; }
+
+.mcu-browser,
+.export-options {
+  border-color: var(--line-strong);
+  box-shadow: 0 14px 34px rgb(27 58 98 / 0.16);
+}
+.mcu-browser-list button:hover,
+.export-options button:hover { background: var(--hover-bg); }
+
+@media (max-width: 1320px) {
+  .app-header { padding-inline: 20px; }
+  .control-panel-scroll,
+  .control-panel-actions { padding-inline: 16px; }
+  .detail-panel { padding-inline: 18px; }
+  .pinout-panel { padding-inline: 16px; }
+}
+
+/* Keep scroll affordances visible but quiet when a large package exceeds the
+   center canvas at notebook-sized widths. */
+.control-panel-scroll,
+.detail-panel,
+.pinout-panel,
+.category-items,
+.peripheral-signal-list,
+.function-grid,
+.module-chip-list,
+.mcu-browser-list {
+  scrollbar-color: var(--scroll-thumb) transparent;
+  scrollbar-width: thin;
+}
+.control-panel-scroll::-webkit-scrollbar,
+.detail-panel::-webkit-scrollbar,
+.pinout-panel::-webkit-scrollbar,
+.category-items::-webkit-scrollbar,
+.peripheral-signal-list::-webkit-scrollbar,
+.function-grid::-webkit-scrollbar,
+.module-chip-list::-webkit-scrollbar,
+.mcu-browser-list::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.control-panel-scroll::-webkit-scrollbar-track,
+.detail-panel::-webkit-scrollbar-track,
+.pinout-panel::-webkit-scrollbar-track,
+.category-items::-webkit-scrollbar-track,
+.peripheral-signal-list::-webkit-scrollbar-track,
+.function-grid::-webkit-scrollbar-track,
+.module-chip-list::-webkit-scrollbar-track,
+.mcu-browser-list::-webkit-scrollbar-track { background: transparent; }
+.control-panel-scroll::-webkit-scrollbar-thumb,
+.detail-panel::-webkit-scrollbar-thumb,
+.pinout-panel::-webkit-scrollbar-thumb,
+.category-items::-webkit-scrollbar-thumb,
+.peripheral-signal-list::-webkit-scrollbar-thumb,
+.function-grid::-webkit-scrollbar-thumb,
+.module-chip-list::-webkit-scrollbar-thumb,
+.mcu-browser-list::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--scroll-thumb);
+  background-clip: padding-box;
+}
+
+/*
+  暗色主题。
+
+  用 :root[data-theme="dark"] 而不是 @media (prefers-color-scheme)：这个工具的
+  主题是**按本地时间**自动切换的（见 src/lib/theme.js），跟系统偏好无关，而且
+  用户可以手动覆盖。属性选择器的特异性也高于文件里那两处 :root，不必操心
+  它们的先后顺序。
+
+  暗色不是把亮色反相：
+  - 面板比背景**亮**（亮色下相反），这样层次感来自"抬起"而不是"挖洞"；
+  - 外设配色整体提亮并降饱和。原来那套是给浅底设计的，直接搬到深底上
+    会发闷、彼此也分不开；
+  - 阴影改成纯黑并加大不透明度——深底上带蓝的浅阴影根本看不见。
+*/
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0e1621;
+  --panel: #16202d;
+  --panel-strong: #1c2836;
+  --ink: #dce6f2;
+  --muted: #8ea3bd;
+  --line: #2a3849;
+  --line-strong: #44576e;
+  --accent: #5b9bff;
+  --accent-ink: #06111f;
+
+  /* 外设色：提亮 + 降饱和，保证在 #0e1621 上彼此可分 */
+  --spi: #b18aff;
+  --i2c: #3fc7b4;
+  --uart: #ff9552;
+  --fdcan: #ff7b7b;
+  --sdmmc: #6aa8ff;
+  --quadspi: #c58bff;
+  --usb: #3fc0dd;
+  --eth: #5fc97f;
+  --timer: #e8c04b;
+  --analog: #ff8f5e;
+  --protected: #7d92ad;
+  --ok: #5fc97f;
+  --danger: #ff7b7b;
+  --warn: #e8b055;
+  --fixed: #64788f;
+
+  --chip-1: #1a2635;
+  --chip-2: #213143;
+  --chip-3: #293c52;
+  --chip-ink: #cfdcec;
+  --chip-ink-dim: #8ba0ba;
+
+  --scroll-thumb: #3a4c62;
+  --focus-fill: #5a4a12;
+  --chip-gloss: #4a6ea8;
+  --warn-ink: #1a1000;
+  --shadow: 0 0 0;
+  --stage-gloss: 120 160 220;
+  /* 表单控件比面板**更暗**——亮色下靠"更亮"表示可输入，暗色下反过来，
+     凹陷感才是输入框该有的样子。 */
+  --field-bg: #111b27;
+  --hover-bg: #22303f;
+  --panel-tint: #121c28;
+
+  /* 高光改成冷蓝并把强度压到几乎不可见——深底上"打亮边缘"这个手法本身就不
+     成立，留一点点只是为了不让大块面积显得死板。 */
+  --gloss-edge-l: 0.045;
+  --gloss-edge-r: 0.03;
+  --gloss-inset: 0.10;
+  --legend-bg: color-mix(in srgb, var(--panel-strong) 72%, transparent);
+}
+
+/* 半透明白底的浮层在暗色下会变成灰雾，换成实心面板色 */
+:root[data-theme="dark"] .peripheral-focus-banner {
+  background: color-mix(in srgb, var(--panel-strong) 92%, transparent);
+}
+
+/* 主题切换控件 */
+.theme-switch { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel); }
+.theme-switch button { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; height: 24px; padding: 0 7px; border: 0; border-radius: 999px; background: none; color: var(--muted); font-size: 11px; line-height: 1; cursor: pointer; transition: background 120ms ease, color 120ms ease; }
+.theme-switch button:hover { color: var(--ink); }
+.theme-switch button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 650; }
+
+/* ── 顶栏的次要入口 ─────────────────────────────────────────────── */
+.header-utility { display: inline-flex; gap: 6px; }
+.utility-button { height: 26px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel); color: var(--muted); font-size: 11px; cursor: pointer; transition: color 120ms ease, border-color 120ms ease; }
+.utility-button:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ── 新手教程 ───────────────────────────────────────────────────── */
+.tour-layer { position: fixed; inset: 0; z-index: 90; }
+/* 聚光灯：往外铺满视口的巨大阴影，中间那块就是"洞"。比四块遮罩拼接稳——
+   不会因为取整误差在边缘露缝。pointer-events 放开，让人能看清底下的元素。 */
+.tour-spotlight { position: fixed; border-radius: 8px; box-shadow: 0 0 0 9999px rgb(var(--shadow) / 0.58); outline: 2px solid var(--accent); outline-offset: 2px; pointer-events: none; transition: top 180ms ease, left 180ms ease, width 180ms ease, height 180ms ease; }
+.tour-scrim { position: fixed; inset: 0; background: rgb(var(--shadow) / 0.58); }
+.tour-card { position: fixed; width: 320px; padding: 15px 16px 13px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--panel-strong); box-shadow: 0 16px 40px rgb(var(--shadow) / 0.32); }
+.tour-progress { color: var(--muted); font: 10px "Cascadia Mono", Consolas, monospace; letter-spacing: 0.08em; }
+.tour-card h3 { margin: 5px 0 7px; font-size: 15px; }
+.tour-card p { margin: 0 0 13px; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.tour-actions { display: flex; align-items: center; justify-content: space-between; }
+.tour-nav { display: flex; gap: 6px; }
+.tour-card button { height: 28px; padding: 0 11px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel); color: var(--ink); font-size: 12px; cursor: pointer; }
+.tour-card .tour-skip { border-color: transparent; background: none; color: var(--muted); padding-inline: 2px; }
+.tour-card .tour-skip:hover { color: var(--ink); }
+.tour-card .tour-primary { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); font-weight: 650; }
+
+/* ── 个人中心（右侧抽屉）─────────────────────────────────────────── */
+.sheet-layer { position: fixed; inset: 0; z-index: 80; display: flex; justify-content: flex-end; }
+.sheet-scrim { flex: 1; border: 0; padding: 0; background: rgb(var(--shadow) / 0.42); cursor: default; }
+.sheet { width: min(460px, 92vw); overflow-y: auto; padding: 22px 24px 32px; background: var(--panel); border-left: 1px solid var(--line-strong); box-shadow: -18px 0 44px rgb(var(--shadow) / 0.26); }
+.sheet-head { display: flex; align-items: flex-start; justify-content: space-between; }
+.sheet-head h2 { margin: 4px 0 0; font-size: 21px; }
+.sheet-close { width: 30px; height: 30px; border: 0; border-radius: 7px; background: none; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; }
+.sheet-close:hover { background: var(--hover-bg); color: var(--ink); }
+.sheet-intro { margin: 12px 0 4px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.sheet section { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.sheet section h3 { margin: 0 0 12px; font-size: 13px; letter-spacing: 0.02em; }
+.sheet-empty, .sheet-note { color: var(--muted); font-size: 11px; line-height: 1.6; }
+.sheet-note { margin: 11px 0 0; }
+.sheet-note code { font: 10px "Cascadia Mono", Consolas, monospace; }
+
+.pref-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 9px 0; }
+.pref-row + .pref-row { border-top: 1px dashed var(--line); }
+.pref-row strong { display: block; font-size: 12px; font-weight: 620; }
+.pref-row small { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.pref-row select { height: 30px; max-width: 190px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--field-bg); color: var(--ink); font-size: 12px; }
+.pref-checks { display: grid; gap: 5px; }
+.pref-checks label { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+
+.recent-list, .storage-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+.recent-list li { display: flex; align-items: stretch; gap: 4px; }
+.recent-list li > button:first-child { flex: 1; display: grid; grid-template-columns: 1fr auto; gap: 1px 8px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel-strong); color: var(--ink); text-align: left; cursor: pointer; }
+.recent-list li > button:first-child:hover:not(:disabled) { border-color: var(--accent); }
+.recent-list li > button:first-child:disabled { cursor: default; opacity: 0.72; }
+.recent-list strong { font-size: 12px; }
+.recent-list span { color: var(--muted); font-size: 11px; }
+.recent-list em { grid-column: 1 / -1; color: var(--muted); font-size: 10px; font-style: normal; }
+.recent-list li.is-current > button:first-child { border-color: var(--accent); }
+.recent-forget { width: 26px; border: 1px solid var(--line); border-radius: 7px; background: none; color: var(--muted); cursor: pointer; }
+.recent-forget:hover { border-color: var(--danger); color: var(--danger); }
+
+.storage-list li { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel-strong); }
+.storage-list strong { display: block; font-size: 12px; }
+.storage-list small { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; }
+.storage-list > li > span { color: var(--muted); font: 11px "Cascadia Mono", Consolas, monospace; }
+.storage-list button { height: 26px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel); color: var(--muted); font-size: 11px; cursor: pointer; }
+.storage-list button:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+.storage-list button:disabled { opacity: 0.45; cursor: default; }
+
+/* 外设条目：名称（检视）+ 右侧的加入需求开关。原来整行就是一个按钮，
+   现在拆成一行两个，用 grid 让名称占满剩余宽度。 */
+.peripheral-item-row { display: grid; grid-template-columns: 1fr auto; align-items: stretch; gap: 4px; }
+.peripheral-item-row .peripheral-item { width: 100%; }
+.peripheral-pick { width: 28px; flex: none; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-strong); color: var(--muted); font-size: 13px; line-height: 1; cursor: pointer; transition: border-color 120ms ease, background 120ms ease, color 120ms ease; }
+.peripheral-pick:hover { border-color: var(--accent); color: var(--accent); }
+.peripheral-pick[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.peripheral-item-row.is-added .peripheral-item { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.peripheral-item-row.is-added .peripheral-item small { color: var(--accent); }
+
+/* The planner is a viewport-filling workbench. Keep the document itself from
+   growing with the long left navigation; each work area owns its own scroll. */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+#root {
+  height: 100dvh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#root > main {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+.workspace {
+  flex: 1 1 0;
+  min-height: 0;
+  height: 0;
+  overflow: hidden;
+}
+.control-panel,
+.detail-panel,
+.pinout-panel {
+  min-height: 0;
+  max-height: none;
+  height: auto;
+}

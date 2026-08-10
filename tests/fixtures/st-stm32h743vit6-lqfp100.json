@@ -1,0 +1,35 @@
+{
+  "id": "st-stm32h743vit6-lqfp100",
+  "note": "抽检点全部对着 DS12110 Rev 11 的引脚表（p.64-88）和 AF 表（p.89-100）人工核对。",
+  "partNumber": "STM32H743VIT6",
+  "package": "LQFP100",
+  "pinCount": 100,
+  "gpioCount": 82,
+  "minFunctionCount": 700,
+  "layout": {
+    "kind": "perimeter",
+    "pinsPerSide": 25,
+    "sideRanges": { "left": [1, 25], "bottom": [26, 50], "right": [51, 75], "top": [76, 100] }
+  },
+  "functions": [
+    { "pin": "PA5", "function": "SPI1_SCK", "af": 5 },
+    { "pin": "PB6", "function": "I2C1_SCL", "af": 4 },
+    { "pin": "PA9", "function": "USART1_TX", "af": 7 },
+    { "pin": "PE2", "function": "ETH_MII_TXD3", "af": 11 }
+  ],
+  "canonicalSignals": [
+    { "function": "SPI1_MOSI", "type": "SPI", "instance": "SPI1", "signal": "MOSI" },
+    { "function": "TIM1_CH1N", "type": "TIM", "instance": "TIM1", "signal": "CH1N" },
+    { "function": "FDCAN1_TX", "type": "FDCAN", "instance": "FDCAN1", "signal": "TX" }
+  ],
+  "protection": { "PA13": "debug", "PA14": "debug", "PH0": "oscillator" },
+  "analog": {
+    "ADC": { "ADC1": 14, "ADC2": 12, "ADC3": 4 },
+    "DAC": { "DAC1": 2 }
+  },
+  "dacPins": ["PA4:OUT1", "PA5:OUT2"],
+  "fiveVolt": {
+    "supported": true,
+    "intolerant": ["PA4", "PA5", "PA7", "PB1", "PC2", "PC3", "PC4", "PC5", "PE7", "PE8", "PE9"]
+  }
+}

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+work/
+
+# 按需器件的转换缓存。由本地服务器在用户选中某颗片子时写入，内容取决于本机装的
+# CubeMX / SysConfig 版本，不该进版本库——要把某颗固化进目录走
+# npm run mcu:import，那才会写进 src/data/mcus/ 并被 npm test 覆盖。
+.cache/
+
+# 本机 AI 工具配置，不属于项目源码
+.claude/

@@ -1,0 +1,1166 @@
+{
+  "id": "st-stm32f103c8t6-lqfp48",
+  "partNumber": "STM32F103C8T6",
+  "vendor": "STMicroelectronics",
+  "family": "STM32F103",
+  "core": "ARM Cortex-M3",
+  "package": "LQFP48",
+  "pinCount": 48,
+  "uiProfile": "generic",
+  "status": "generated",
+  "analogConvention": "st",
+  "signalDialect": "st-f1",
+  "packageGeometry": {
+    "shape": "LQFP",
+    "pinsPerSide": 12,
+    "numbering": "counterclockwise"
+  },
+  "source": {
+    "document": "STM32CubeMX DB STM32F103C(8-B)Tx",
+    "revision": "STM32F103x8_gpio_v1_0",
+    "url": "https://github.com/STMicroelectronics/STM32_open_pin_data",
+    "pinTable": "mcu/STM32F103C(8-B)Tx.xml",
+    "afTable": "mcu/IP/GPIO-STM32F103x8_gpio_v1_0_Modes.xml"
+  },
+  "pins": [
+    {
+      "number": 1,
+      "name": "VBAT",
+      "resetName": "VBAT",
+      "kind": "supply",
+      "ioType": "S",
+      "ioStructure": "-",
+      "notes": "-",
+      "functions": [],
+      "additionalFunctions": [],
+      "protection": []
+    },
+    {
+      "number": 2,
+      "name": "PC13",
+      "resetName": "PC13-TAMPER-RTC",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [],
+      "additionalFunctions": [
+        "TAMPER-RTC",
+        "RTC_OUT",
+        "RTC_TAMPER"
+      ],
+      "protection": [],
+      "ioStructure": "TC"
+    },
+    {
+      "number": 3,
+      "name": "PC14",
+      "resetName": "PC14-OSC32_IN",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [],
+      "additionalFunctions": [
+        "OSC32_IN"
+      ],
+      "protection": [
+        "oscillator"
+      ],
+      "ioStructure": "TC"
+    },
+    {
+      "number": 4,
+      "name": "PC15",
+      "resetName": "PC15-OSC32_OUT",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [],
+      "additionalFunctions": [
+        "OSC32_OUT"
+      ],
+      "protection": [
+        "oscillator"
+      ],
+      "ioStructure": "TC"
+    },
+    {
+      "number": 5,
+      "name": "PD0",
+      "resetName": "PD0-OSC_IN",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [],
+      "additionalFunctions": [
+        "OSC_IN"
+      ],
+      "protection": [
+        "oscillator"
+      ],
+      "ioStructure": "TC"
+    },
+    {
+      "number": 6,
+      "name": "PD1",
+      "resetName": "PD1-OSC_OUT",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [],
+      "additionalFunctions": [
+        "OSC_OUT"
+      ],
+      "protection": [
+        "oscillator"
+      ],
+      "ioStructure": "TC"
+    },
+    {
+      "number": 7,
+      "name": "NRST",
+      "resetName": "NRST",
+      "kind": "special",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [],
+      "additionalFunctions": [],
+      "protection": [
+        "system"
+      ],
+      "ioStructure": "RST"
+    },
+    {
+      "number": 8,
+      "name": "VSSA",
+      "resetName": "VSSA",
+      "kind": "supply",
+      "ioType": "S",
+      "ioStructure": "-",
+      "notes": "-",
+      "functions": [],
+      "additionalFunctions": [],
+      "protection": []
+    },
+    {
+      "number": 9,
+      "name": "VDDA",
+      "resetName": "VDDA",
+      "kind": "supply",
+      "ioType": "S",
+      "ioStructure": "-",
+      "notes": "-",
+      "functions": [],
+      "additionalFunctions": [],
+      "protection": []
+    },
+    {
+      "number": 10,
+      "name": "PA0",
+      "resetName": "PA0-WKUP",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "TIM2_CH1",
+          "af": 0
+        },
+        {
+          "name": "TIM2_CH1",
+          "af": 2
+        },
+        {
+          "name": "TIM2_ETR",
+          "af": 0
+        },
+        {
+          "name": "TIM2_ETR",
+          "af": 2
+        },
+        {
+          "name": "USART2_CTS",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [
+        "WKUP",
+        "ADC1_IN0",
+        "ADC2_IN0"
+      ],
+      "protection": [],
+      "ioStructure": "TTa"
+    },
+    {
+      "number": 11,
+      "name": "PA1",
+      "resetName": "PA1",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "TIM2_CH2",
+          "af": 0
+        },
+        {
+          "name": "TIM2_CH2",
+          "af": 2
+        },
+        {
+          "name": "USART2_RTS",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [
+        "ADC1_IN1",
+        "ADC2_IN1"
+      ],
+      "protection": [],
+      "ioStructure": "TTa"
+    },
+    {
+      "number": 12,
+      "name": "PA2",
+      "resetName": "PA2",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "TIM2_CH3",
+          "af": 0
+        },
+        {
+          "name": "TIM2_CH3",
+          "af": 1
+        },
+        {
+          "name": "USART2_TX",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [
+        "ADC1_IN2",
+        "ADC2_IN2"
+      ],
+      "protection": [],
+      "ioStructure": "TTa"
+    },
+    {
+      "number": 13,
+      "name": "PA3",
+      "resetName": "PA3",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "TIM2_CH4",
+          "af": 0
+        },
+        {
+          "name": "TIM2_CH4",
+          "af": 1
+        },
+        {
+          "name": "USART2_RX",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [
+        "ADC1_IN3",
+        "ADC2_IN3"
+      ],
+      "protection": [],
+      "ioStructure": "TTa"
+    },
+    {
+      "number": 14,
+      "name": "PA4",
+      "resetName": "PA4",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "SPI1_NSS",
+          "af": 0
+        },
+        {
+          "name": "USART2_CK",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [
+        "ADC1_IN4",
+        "ADC2_IN4"
+      ],
+      "protection": [],
+      "ioStructure": "TTa"
+    },
+    {
+      "number": 15,
+      "name": "PA5",
+      "resetName": "PA5",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "SPI1_SCK",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [
+        "ADC1_IN5",
+        "ADC2_IN5"
+      ],
+      "protection": [],
+      "ioStructure": "TTa"
+    },
+    {
+      "number": 16,
+      "name": "PA6",
+      "resetName": "PA6",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "SPI1_MISO",
+          "af": 0
+        },
+        {
+          "name": "TIM1_BKIN",
+          "af": 1
+        },
+        {
+          "name": "TIM3_CH1",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [
+        "ADC1_IN6",
+        "ADC2_IN6"
+      ],
+      "protection": [],
+      "ioStructure": "TTa"
+    },
+    {
+      "number": 17,
+      "name": "PA7",
+      "resetName": "PA7",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "SPI1_MOSI",
+          "af": 0
+        },
+        {
+          "name": "TIM1_CH1N",
+          "af": 1
+        },
+        {
+          "name": "TIM3_CH2",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [
+        "ADC1_IN7",
+        "ADC2_IN7"
+      ],
+      "protection": [],
+      "ioStructure": "TTa"
+    },
+    {
+      "number": 18,
+      "name": "PB0",
+      "resetName": "PB0",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "TIM1_CH2N",
+          "af": 1
+        },
+        {
+          "name": "TIM3_CH3",
+          "af": 0
+        },
+        {
+          "name": "TIM3_CH3",
+          "af": 1
+        }
+      ],
+      "additionalFunctions": [
+        "ADC1_IN8",
+        "ADC2_IN8"
+      ],
+      "protection": [],
+      "ioStructure": "TTa"
+    },
+    {
+      "number": 19,
+      "name": "PB1",
+      "resetName": "PB1",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "TIM1_CH3N",
+          "af": 1
+        },
+        {
+          "name": "TIM3_CH4",
+          "af": 0
+        },
+        {
+          "name": "TIM3_CH4",
+          "af": 1
+        }
+      ],
+      "additionalFunctions": [
+        "ADC1_IN9",
+        "ADC2_IN9"
+      ],
+      "protection": [],
+      "ioStructure": "TTa"
+    },
+    {
+      "number": 20,
+      "name": "PB2",
+      "resetName": "PB2",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [],
+      "additionalFunctions": [],
+      "protection": [],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 21,
+      "name": "PB10",
+      "resetName": "PB10",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "I2C2_SCL",
+          "af": 0
+        },
+        {
+          "name": "TIM2_CH3",
+          "af": 2
+        },
+        {
+          "name": "TIM2_CH3",
+          "af": 3
+        },
+        {
+          "name": "USART3_TX",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 22,
+      "name": "PB11",
+      "resetName": "PB11",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "I2C2_SDA",
+          "af": 0
+        },
+        {
+          "name": "TIM2_CH4",
+          "af": 2
+        },
+        {
+          "name": "TIM2_CH4",
+          "af": 3
+        },
+        {
+          "name": "USART3_RX",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 23,
+      "name": "VSS",
+      "resetName": "VSS",
+      "kind": "supply",
+      "ioType": "S",
+      "ioStructure": "-",
+      "notes": "-",
+      "functions": [],
+      "additionalFunctions": [],
+      "protection": []
+    },
+    {
+      "number": 24,
+      "name": "VDD",
+      "resetName": "VDD",
+      "kind": "supply",
+      "ioType": "S",
+      "ioStructure": "-",
+      "notes": "-",
+      "functions": [],
+      "additionalFunctions": [],
+      "protection": []
+    },
+    {
+      "number": 25,
+      "name": "PB12",
+      "resetName": "PB12",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "I2C2_SMBA",
+          "af": 0
+        },
+        {
+          "name": "SPI2_NSS",
+          "af": 0
+        },
+        {
+          "name": "TIM1_BKIN",
+          "af": 0
+        },
+        {
+          "name": "USART3_CK",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 26,
+      "name": "PB13",
+      "resetName": "PB13",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "SPI2_SCK",
+          "af": 0
+        },
+        {
+          "name": "TIM1_CH1N",
+          "af": 0
+        },
+        {
+          "name": "USART3_CTS",
+          "af": 0
+        },
+        {
+          "name": "USART3_CTS",
+          "af": 1
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 27,
+      "name": "PB14",
+      "resetName": "PB14",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "SPI2_MISO",
+          "af": 0
+        },
+        {
+          "name": "TIM1_CH2N",
+          "af": 0
+        },
+        {
+          "name": "USART3_RTS",
+          "af": 0
+        },
+        {
+          "name": "USART3_RTS",
+          "af": 1
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 28,
+      "name": "PB15",
+      "resetName": "PB15",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "SPI2_MOSI",
+          "af": 0
+        },
+        {
+          "name": "TIM1_CH3N",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 29,
+      "name": "PA8",
+      "resetName": "PA8",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "TIM1_CH1",
+          "af": 0
+        },
+        {
+          "name": "TIM1_CH1",
+          "af": 1
+        },
+        {
+          "name": "USART1_CK",
+          "af": 0
+        },
+        {
+          "name": "USART1_CK",
+          "af": 1
+        }
+      ],
+      "additionalFunctions": [
+        "MCO"
+      ],
+      "protection": [],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 30,
+      "name": "PA9",
+      "resetName": "PA9",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "TIM1_CH2",
+          "af": 0
+        },
+        {
+          "name": "TIM1_CH2",
+          "af": 1
+        },
+        {
+          "name": "USART1_TX",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 31,
+      "name": "PA10",
+      "resetName": "PA10",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "TIM1_CH3",
+          "af": 0
+        },
+        {
+          "name": "TIM1_CH3",
+          "af": 1
+        },
+        {
+          "name": "USART1_RX",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 32,
+      "name": "PA11",
+      "resetName": "PA11",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "CAN_RX",
+          "af": 0
+        },
+        {
+          "name": "TIM1_CH4",
+          "af": 0
+        },
+        {
+          "name": "TIM1_CH4",
+          "af": 1
+        },
+        {
+          "name": "USART1_CTS",
+          "af": 0
+        },
+        {
+          "name": "USART1_CTS",
+          "af": 1
+        },
+        {
+          "name": "USB_DM",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 33,
+      "name": "PA12",
+      "resetName": "PA12",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "CAN_TX",
+          "af": 0
+        },
+        {
+          "name": "TIM1_ETR",
+          "af": 0
+        },
+        {
+          "name": "TIM1_ETR",
+          "af": 1
+        },
+        {
+          "name": "USART1_RTS",
+          "af": 0
+        },
+        {
+          "name": "USART1_RTS",
+          "af": 1
+        },
+        {
+          "name": "USB_DP",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 34,
+      "name": "PA13",
+      "resetName": "PA13",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "JTMS-SWDIO",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [
+        "debug"
+      ],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 35,
+      "name": "VSS",
+      "resetName": "VSS",
+      "kind": "supply",
+      "ioType": "S",
+      "ioStructure": "-",
+      "notes": "-",
+      "functions": [],
+      "additionalFunctions": [],
+      "protection": []
+    },
+    {
+      "number": 36,
+      "name": "VDD",
+      "resetName": "VDD",
+      "kind": "supply",
+      "ioType": "S",
+      "ioStructure": "-",
+      "notes": "-",
+      "functions": [],
+      "additionalFunctions": [],
+      "protection": []
+    },
+    {
+      "number": 37,
+      "name": "PA14",
+      "resetName": "PA14",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "JTCK-SWCLK",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [
+        "debug"
+      ],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 38,
+      "name": "PA15",
+      "resetName": "PA15",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "SPI1_NSS",
+          "af": 1
+        },
+        {
+          "name": "JTDI",
+          "af": 0
+        },
+        {
+          "name": "TIM2_CH1",
+          "af": 1
+        },
+        {
+          "name": "TIM2_CH1",
+          "af": 3
+        },
+        {
+          "name": "TIM2_ETR",
+          "af": 1
+        },
+        {
+          "name": "TIM2_ETR",
+          "af": 3
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [
+        "debug"
+      ],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 39,
+      "name": "PB3",
+      "resetName": "PB3",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "SPI1_SCK",
+          "af": 1
+        },
+        {
+          "name": "JTDO-TRACESWO",
+          "af": 0
+        },
+        {
+          "name": "TIM2_CH2",
+          "af": 1
+        },
+        {
+          "name": "TIM2_CH2",
+          "af": 3
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [
+        "debug"
+      ],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 40,
+      "name": "PB4",
+      "resetName": "PB4",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "SPI1_MISO",
+          "af": 1
+        },
+        {
+          "name": "NJTRST",
+          "af": 0
+        },
+        {
+          "name": "TIM3_CH1",
+          "af": 1
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [
+        "debug"
+      ],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 41,
+      "name": "PB5",
+      "resetName": "PB5",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "I2C1_SMBA",
+          "af": 0
+        },
+        {
+          "name": "I2C1_SMBA",
+          "af": 1
+        },
+        {
+          "name": "SPI1_MOSI",
+          "af": 1
+        },
+        {
+          "name": "TIM3_CH2",
+          "af": 1
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 42,
+      "name": "PB6",
+      "resetName": "PB6",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "I2C1_SCL",
+          "af": 0
+        },
+        {
+          "name": "TIM4_CH1",
+          "af": 0
+        },
+        {
+          "name": "USART1_TX",
+          "af": 1
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 43,
+      "name": "PB7",
+      "resetName": "PB7",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "I2C1_SDA",
+          "af": 0
+        },
+        {
+          "name": "TIM4_CH2",
+          "af": 0
+        },
+        {
+          "name": "USART1_RX",
+          "af": 1
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 44,
+      "name": "BOOT0",
+      "resetName": "BOOT0",
+      "kind": "special",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [],
+      "additionalFunctions": [],
+      "protection": [
+        "system"
+      ],
+      "ioStructure": "B"
+    },
+    {
+      "number": 45,
+      "name": "PB8",
+      "resetName": "PB8",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "CAN_RX",
+          "af": 1
+        },
+        {
+          "name": "I2C1_SCL",
+          "af": 1
+        },
+        {
+          "name": "TIM4_CH3",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 46,
+      "name": "PB9",
+      "resetName": "PB9",
+      "kind": "gpio",
+      "ioType": "I/O",
+      "notes": "-",
+      "functions": [
+        {
+          "name": "CAN_TX",
+          "af": 1
+        },
+        {
+          "name": "I2C1_SDA",
+          "af": 1
+        },
+        {
+          "name": "TIM4_CH4",
+          "af": 0
+        }
+      ],
+      "additionalFunctions": [],
+      "protection": [],
+      "ioStructure": "FT"
+    },
+    {
+      "number": 47,
+      "name": "VSS",
+      "resetName": "VSS",
+      "kind": "supply",
+      "ioType": "S",
+      "ioStructure": "-",
+      "notes": "-",
+      "functions": [],
+      "additionalFunctions": [],
+      "protection": []
+    },
+    {
+      "number": 48,
+      "name": "VDD",
+      "resetName": "VDD",
+      "kind": "supply",
+      "ioType": "S",
+      "ioStructure": "-",
+      "notes": "-",
+      "functions": [],
+      "additionalFunctions": [],
+      "protection": []
+    }
+  ],
+  "afGrouping": "instance",
+  "remapMacros": {
+    "CAN": [
+      "",
+      "__HAL_AFIO_REMAP_CAN1_2()"
+    ],
+    "I2C1": [
+      "",
+      "__HAL_AFIO_REMAP_I2C1_ENABLE()"
+    ],
+    "SPI1": [
+      "",
+      "__HAL_AFIO_REMAP_SPI1_ENABLE()"
+    ],
+    "TIM1": [
+      "",
+      "__HAL_AFIO_REMAP_TIM1_PARTIAL()"
+    ],
+    "TIM2": [
+      "",
+      "__HAL_AFIO_REMAP_TIM2_PARTIAL_1()",
+      "__HAL_AFIO_REMAP_TIM2_PARTIAL_2()",
+      "__HAL_AFIO_REMAP_TIM2_ENABLE()"
+    ],
+    "TIM3": [
+      "",
+      "__HAL_AFIO_REMAP_TIM3_PARTIAL()"
+    ],
+    "TIM4": [
+      ""
+    ],
+    "USART1": [
+      "",
+      "__HAL_AFIO_REMAP_USART1_ENABLE()"
+    ],
+    "USART2": [
+      ""
+    ],
+    "USART3": [
+      "",
+      "__HAL_AFIO_REMAP_USART3_PARTIAL()"
+    ]
+  },
+  "electrical": {
+    "fiveVoltTolerantIoStructures": [
+      "FT"
+    ],
+    "note": "DS5319 Table 5：FT 耐 5V；TTa（PA0-PA7/PB0/PB1，直连 ADC）和 TC（PC13-15、PD0/PD1）只到 3.3V。"
+  }
+}

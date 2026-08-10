@@ -1,0 +1,79 @@
+{
+  "id": "st-stm32f103c8t6-lqfp48",
+  "note": "引脚、复用功能和重映射组由 tools/import-stm32.mjs 从 STM32CubeMX 器件库（ST 官方，同源于 STM32_open_pin_data）机器导入，并与一份独立手工整理的数据交叉比对过：37 个 GPIO 里 35 个逐条一致，2 处差异（USART3 部分重映射下 CTS/RTS 不挪窝）经查库确认是手工版漏了。GPIO 数 37 与库自己声明的 IONb 吻合。仍未核实的只剩电气部分——ioStructure 和 5V 白名单是手工填的，CubeMX 库里没有这类信息：(1) PB5 的 I/O structure 究竟是 FT 还是 TC，现按 FT 处理，若实为 TC 则它不该进 5V 候选；(2) PD0/PD1（OSC_IN/OSC_OUT）现按 TC 保守处理。这两条要查 DS5319 Table 5，核实后可把 status 提到 verified。functions 里 TIM3_CH3 / TIM2_CH1 / I2C1_SMBA / USART1_CK / USART3_CTS 那几条是专门盯重映射建模的：部分重映射下没挪窝的信号必须在涉及的每一档里都登记，漏了求解器就会认为选了那一档就没有这个信号，把可行的接法判成无解。",
+  "partNumber": "STM32F103C8T6",
+  "package": "LQFP48",
+  "pinCount": 48,
+  "gpioCount": 37,
+  "minFunctionCount": 95,
+  "layout": {
+    "kind": "perimeter",
+    "pinsPerSide": 12,
+    "sideRanges": { "left": [1, 12], "bottom": [13, 24], "right": [25, 36], "top": [37, 48] }
+  },
+  "pinNames": {
+    "1": "VBAT",
+    "2": "PC13",
+    "7": "NRST",
+    "10": "PA0",
+    "20": "PB2",
+    "29": "PA8",
+    "34": "PA13",
+    "44": "BOOT0",
+    "48": "VDD"
+  },
+  "functions": [
+    { "pin": "PA9", "function": "USART1_TX", "af": 0 },
+    { "pin": "PA10", "function": "USART1_RX", "af": 0 },
+    { "pin": "PB6", "function": "USART1_TX", "af": 1 },
+    { "pin": "PB7", "function": "USART1_RX", "af": 1 },
+    { "pin": "PA5", "function": "SPI1_SCK", "af": 0 },
+    { "pin": "PB3", "function": "SPI1_SCK", "af": 1 },
+    { "pin": "PB6", "function": "I2C1_SCL", "af": 0 },
+    { "pin": "PB8", "function": "I2C1_SCL", "af": 1 },
+    { "pin": "PA11", "function": "CAN_RX", "af": 0 },
+    { "pin": "PB8", "function": "CAN_RX", "af": 1 },
+    { "pin": "PA11", "function": "USB_DM", "af": 0 },
+    { "pin": "PA12", "function": "USB_DP", "af": 0 },
+    { "pin": "PB13", "function": "SPI2_SCK", "af": 0 },
+    { "pin": "PB0", "function": "TIM3_CH3", "af": 0 },
+    { "pin": "PB4", "function": "TIM3_CH1", "af": 1 },
+    { "pin": "PA0", "function": "TIM2_CH1", "af": 0 },
+    { "pin": "PA15", "function": "TIM2_CH1", "af": 1 },
+    { "pin": "PB5", "function": "I2C1_SMBA", "af": 0 },
+    { "pin": "PA8", "function": "USART1_CK", "af": 0 },
+    { "pin": "PB13", "function": "USART3_CTS", "af": 0 }
+  ],
+  "canonicalSignals": [
+    { "function": "CAN_TX", "type": "FDCAN", "instance": "CAN", "signal": "TX" },
+    { "function": "CAN_RX", "type": "FDCAN", "instance": "CAN", "signal": "RX" },
+    { "function": "USB_DM", "type": "USB", "instance": "USB", "signal": "DM" },
+    { "function": "USB_DP", "type": "USB", "instance": "USB", "signal": "DP" },
+    { "function": "SPI1_MOSI", "type": "SPI", "instance": "SPI1", "signal": "MOSI" },
+    { "function": "USART2_TX", "type": "UART", "instance": "USART2", "signal": "TX" },
+    { "function": "TIM3_CH1", "type": "TIM", "instance": "TIM3", "signal": "CH1" },
+    { "function": "TIM1_CH1N", "type": "TIM", "instance": "TIM1", "signal": "CH1N" }
+  ],
+  "protection": {
+    "PA13": "debug",
+    "PA14": "debug",
+    "PA15": "debug",
+    "PB3": "debug",
+    "PB4": "debug",
+    "PC14": "oscillator",
+    "PC15": "oscillator",
+    "PD0": "oscillator",
+    "PD1": "oscillator"
+  },
+  "analog": {
+    "ADC": { "ADC1": 10, "ADC2": 10 }
+  },
+  "fiveVolt": {
+    "supported": true,
+    "intolerant": [
+      "PA0", "PA1", "PA2", "PA3", "PA4", "PA5", "PA6", "PA7",
+      "PB0", "PB1",
+      "PC13", "PC14", "PC15", "PD0", "PD1"
+    ]
+  }
+}

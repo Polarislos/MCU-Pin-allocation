@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCU Pin Planner device data",
+  "type": "object",
+  "required": ["id", "partNumber", "vendor", "family", "package", "pinCount", "pins", "source"],
+  "properties": {
+    "id": {
+      "description": "目录里的唯一标识，也是工程文件里记录的 mcuId。约定 <厂商>-<型号>-<封装>，全小写。",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)+$"
+    },
+    "partNumber": { "type": "string" },
+    "vendor": { "type": "string" },
+    "family": { "type": "string" },
+    "core": { "type": "string" },
+    "package": { "type": "string" },
+    "packageSize": { "type": "string" },
+    "uiProfile": {
+      "description": "侧边栏形态。省略或取值未知时用 generic——完全从引脚数据现推，不套任何厂商的静态条目。",
+      "type": "string"
+    },
+    "status": {
+      "description": "数据可信度。generated = 导入脚本产出、尚未人工抽检；verified = 已对着 datasheet 核对过锚点。",
+      "type": "string",
+      "enum": ["draft", "generated", "verified"]
+    },
+    "packageGeometry": {
+      "description": "封装形态。shape 决定 src/lib/package.js 用哪套布局策略：四边（LQFP/QFN…）、两边（SOIC/TSSOP…）或栅格（BGA/WLCSP…）。省略时从 package 字符串推断。",
+      "type": "object",
+      "properties": {
+        "shape": { "type": "string" },
+        "pinsPerSide": { "type": "integer", "minimum": 1 },
+        "rows": { "description": "栅格封装的行数", "type": "integer", "minimum": 1 },
+        "columns": { "description": "栅格封装的列数", "type": "integer", "minimum": 1 },
+        "numbering": { "type": "string" },
+        "packageCode": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "pinCount": { "type": "integer", "minimum": 1 },
+    "analogConvention": {
+      "description": "模拟功能在 additionalFunctions 里的命名约定，决定 src/lib/analog.js 用哪套模式解析 ADC/DAC 通道。省略等同于 \"st\"。",
+      "type": "string",
+      "enum": ["st", "ti"]
+    },
+    "afGrouping": {
+      "description": "复用功能的选择粒度，决定 src/lib/allocator.js 逐个信号挑脚还是要求整组同选。\"pin\"（省略时的默认）= 每个脚有独立的 AF 选择器（H7 的 GPIOx_AFRL/AFRH、TI 的 PINCM）；\"instance\" = 换脚靠外设级的重映射开关（STM32F1 的 AFIO_MAPR），此时 pins[].functions[].af 承载的是重映射组号而非 AF 编号。",
+      "type": "string",
+      "enum": ["pin", "instance"]
+    },
+    "remapMacros": {
+      "description": "仅 afGrouping = \"instance\" 时有意义。外设实例 → 按重映射组号索引的 HAL 宏名，导出头文件时原样写出。缺某一项时导出会退化成让人自己查 hal_gpio_ex.h 的注释，而不是编一个宏名。",
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "signalDialect": {
+      "description": "数字外设的信号命名方言，决定 src/lib/dialect.js 怎么把厂商写法翻译成规范名（TI 的 SPI0_PICO → MOSI、TIMG0_C0 → CH1）。省略等同于 \"st\"（规范名本身）。",
+      "type": "string",
+      "enum": ["st", "st-f1", "ti-mspm0"]
+    },
+    "electrical": {
+      "description": "参与求解的电气约束。省略某一项即表示该器件数据不支持这条约束，界面会隐藏对应开关，而不是默认判为不满足。",
+      "type": "object",
+      "properties": {
+        "fiveVoltTolerantIoStructures": {
+          "description": "耐 5V 的 ioStructure 取值白名单。显式枚举而非正则，便于用真实数据反查校验。",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "note": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "source": {
+      "type": "object",
+      "required": ["document", "revision"],
+      "properties": {
+        "document": { "type": "string" },
+        "revision": { "type": "string" },
+        "url": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "pins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["number", "name", "kind", "functions", "additionalFunctions", "protection"],
+        "properties": {
+          "number": {
+            "description": "全局唯一的序号，1..pinCount 连续。栅格封装上球的身份是 location，number 仍保留为序号——求解器内部所有引脚集合都按它索引。",
+            "type": "integer",
+            "minimum": 1
+          },
+          "location": {
+            "description": "栅格封装（BGA/WLCSP）的球位，如 \"E14\"。行标沿用 JEDEC 约定跳过 I/O/Q/S/X/Z。",
+            "type": "string",
+            "pattern": "^[A-Z]+[0-9]+$"
+          },
+          "name": { "type": "string" },
+          "resetName": { "type": "string" },
+          "kind": { "type": "string" },
+          "ioType": { "type": "string" },
+          "ioStructure": { "type": "string" },
+          "functions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "af"],
+              "properties": {
+                "name": { "type": "string" },
+                "af": {
+                  "description": "复用功能编号。上限放宽到 31：15 是 ST 的 AF 位宽，TI 的 PF index 已用到 13，别家 IOMUX 更多。",
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 31
+                }
+              }
+            }
+          },
+          "additionalFunctions": { "type": "array", "items": { "type": "string" } },
+          "protection": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}
