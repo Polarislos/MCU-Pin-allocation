@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Embedded module requirement",
+  "type": "object",
+  "required": ["id", "name", "requirements"],
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "category": { "type": "string" },
+    "voltage": { "type": "string" },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "signals"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["SPI", "I2C", "UART", "FDCAN", "SDMMC", "QUADSPI", "USB", "ETH", "TIM", "GPIO", "ADC"]
+          },
+          "signals": { "type": "array", "items": { "type": "string" } },
+          "count": { "type": "integer", "minimum": 1 },
+          "variant": { "type": "string" },
+          "instance": { "type": ["string", "null"] },
+          "speedMHz": { "type": "number", "minimum": 0 },
+          "role": { "type": "string" },
+          "notes": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "optional": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": true
+}

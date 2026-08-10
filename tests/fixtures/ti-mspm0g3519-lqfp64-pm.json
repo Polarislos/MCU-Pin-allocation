@@ -1,0 +1,35 @@
+{
+  "id": "ti-mspm0g3519-lqfp64-pm",
+  "note": "抽检点对着 SLASFA2B Rev B 的 PM(64) 引脚复用表（p.18-35）人工核对。",
+  "partNumber": "MSPM0G3519",
+  "package": "LQFP64 (PM)",
+  "pinCount": 64,
+  "gpioCount": 60,
+  "minFunctionCount": 500,
+  "layout": {
+    "kind": "perimeter",
+    "pinsPerSide": 16,
+    "sideRanges": { "left": [1, 16], "bottom": [17, 32], "right": [33, 48], "top": [49, 64] }
+  },
+  "pinNames": { "1": "PB13", "38": "NRST", "64": "PB12" },
+  "functions": [
+    { "pin": "PA12", "function": "SPI0_SCK", "af": 3 },
+    { "pin": "PA12", "function": "CAN0_TX", "af": 12 },
+    { "pin": "PB17", "function": "SPI0_PICO", "af": 3 },
+    { "pin": "PB19", "function": "SPI0_POCI", "af": 3 }
+  ],
+  "canonicalSignals": [
+    { "function": "SPI0_PICO", "type": "SPI", "instance": "SPI0", "signal": "MOSI" },
+    { "function": "SPI0_POCI", "type": "SPI", "instance": "SPI0", "signal": "MISO" },
+    { "function": "SPI0_CS0", "type": "SPI", "instance": "SPI0", "signal": "NSS" },
+    { "function": "TIMG0_C0", "type": "TIM", "instance": "TIMG0", "signal": "CH1" },
+    { "function": "TIMA0_C3N", "type": "TIM", "instance": "TIMA0", "signal": "CH4N" },
+    { "function": "CAN0_TX", "type": "FDCAN", "instance": "CAN0", "signal": "TX" }
+  ],
+  "protection": { "PA19": "debug", "PA20": "debug", "PA3": "oscillator", "PA5": "oscillator" },
+  "analog": {
+    "ADC": { "ADC0": 13, "ADC1": 14 },
+    "DAC": { "DAC": 1 }
+  },
+  "fiveVolt": { "supported": false }
+}

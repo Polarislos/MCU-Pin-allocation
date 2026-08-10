@@ -1,0 +1,22 @@
+{
+  "name": "stm32-pin-planner",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node tools/prepare-sites-dist.mjs",
+    "mcu:index": "node tools/build-mcu-index.mjs",
+    "mcu:catalog": "node tools/build-device-index.mjs",
+    "mcu:import": "node tools/import-stm32.mjs",
+    "mcu:import:ti": "node tools/import-ti.mjs",
+    "test": "node tools/build-mcu-index.mjs --check && node tests/package.mjs && node tests/verify.mjs && node tests/export.mjs && node tests/fanout.mjs && node tests/netlabels.mjs && node tests/project.mjs && node tests/render.mjs"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {}
+}

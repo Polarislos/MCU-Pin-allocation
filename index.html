@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="MCU 引脚查询与外设分配工具" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>MCU 引脚规划器</title>
+    <script>
+      /*
+        在解析样式表之前就把主题定下来，否则暗色环境下会先闪一帧亮色。
+        这里是刻意重复 src/lib/theme.js 的规则（auto = 18:00–06:00 判夜间）：
+        那个模块要等 JS chunk 下载完才能跑，而这一帧等不起。两处的边界值
+        改动要同步。
+      */
+      (function () {
+        var mode = "auto";
+        try { mode = localStorage.getItem("mcu-pin-planner:theme") || "auto"; } catch (e) {}
+        var theme = mode === "light" || mode === "dark"
+          ? mode
+          : ((new Date()).getHours() >= 18 || (new Date()).getHours() < 6 ? "dark" : "light");
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

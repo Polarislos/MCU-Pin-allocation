@@ -1,0 +1,63 @@
+{
+	"name": "pinplan-netlabels",
+	"uuid": "ab5d27232fd94d9f53d6a99e97605bda",
+	"displayName": "引脚规划器 · 网络标签",
+	"description": "读取 MCU 引脚规划器导出的 .netlabels.json，核对原理图符号的引脚是否与方案一致，并把方案里的网络名一次性打到引脚上。取代扇出表格的 CSV 往返。",
+	"version": "0.3.0",
+	"publisher": "stm32-pin-planner",
+	"engines": {
+		"eda": "^3.2.0"
+	},
+	"license": "MIT",
+	"repository": {
+		"type": "extension-store",
+		"url": ""
+	},
+	"categories": "Other",
+	"keywords": [
+		"Tool"
+	],
+	"images": {
+		"logo": "./images/logo.png"
+	},
+	"homepage": "",
+	"bugs": "",
+	"activationEvents": {},
+	"entry": "./dist/index",
+	"dependentExtensions": {},
+	"headerMenus": {
+		"sch": [
+			{
+				"id": "PinPlan",
+				"title": "引脚规划器",
+				"menuItems": [
+					{
+						"id": "PinPlanApply",
+						"title": "应用引脚方案...",
+						"registerFn": "applyPinPlan"
+					},
+					{
+						"id": "PinPlanVerify",
+						"title": "核对引脚方案...",
+						"registerFn": "verifyPinPlan"
+					},
+					{
+						"id": "PinPlanUndo",
+						"title": "撤销上次应用",
+						"registerFn": "undoLastApply"
+					},
+					{
+						"id": "PinPlanLabelLength",
+						"title": "设置标签长度...",
+						"registerFn": "setLabelLength"
+					},
+					{
+						"id": "PinPlanResetCalibration",
+						"title": "重置坐标校准",
+						"registerFn": "resetCalibration"
+					}
+				]
+			}
+		]
+	}
+}
