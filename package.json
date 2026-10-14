@@ -81,7 +81,7 @@
         "provider": "github",
         "owner": "Polarislos",
         "repo": "MCU-Pin-allocation",
-        "releaseType": "release"
+        "releaseType": "draft"
       }
     ]
   }
