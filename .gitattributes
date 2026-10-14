@@ -1,0 +1,10 @@
+# 生成文件（src/data/mcus/index.js 等）由脚本按 LF 写出，npm test 会逐字比对。
+# Windows 上 core.autocrlf=true（含 GitHub 的 windows runner）检出时会改成 CRLF，
+# 比对就挂了——所以仓库统一 LF，不随平台转换。
+* text=auto eol=lf
+
+# Windows PowerShell 5.1 脚本保持 CRLF
+*.ps1 text eol=crlf
+
+*.ico binary
+*.png binary
