@@ -59,7 +59,12 @@ async function serveStatic(request, response) {
 }
 
 function startServer() {
-  const mcu = createMcuMiddleware({ cacheDir: path.join(app.getPath("userData"), "mcu-cache"), mode: "desktop" });
+  const userData = app.getPath("userData");
+  const mcu = createMcuMiddleware({
+    cacheDir: path.join(userData, "mcu-cache"),
+    settingsFile: path.join(userData, "libraries.json"),
+    mode: "desktop",
+  });
   const server = createServer((request, response) => {
     mcu(request, response, () => {
       serveStatic(request, response).catch((error) => {
@@ -191,6 +196,15 @@ ipcMain.handle("updater:check", () => checkForUpdates());
 ipcMain.handle("updater:download", () => startDownload());
 ipcMain.handle("updater:install", () => {
   if (updateState.status === "downloaded") autoUpdater.quitAndInstall();
+});
+/* 器件库路径的"浏览…"。只返回选中的路径，校验和保存仍走 /api/libraries，
+   浏览器版手填路径也是同一条路。 */
+ipcMain.handle("dialog:pickFolder", async (_event, title) => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    title: String(title || "选择文件夹"),
+    properties: ["openDirectory"],
+  });
+  return canceled ? null : filePaths[0];
 });
 ipcMain.handle("app:openExternal", (_event, target) => {
   if (/^https:\/\/github\.com\//i.test(target)) shell.openExternal(target);

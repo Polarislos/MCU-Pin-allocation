@@ -16,8 +16,8 @@
   读缓存，省掉几百毫秒。要把某颗**固化**进目录（让静态构建也带上、并纳入
   npm test 的不变量检查），走 CLI：npm run mcu:import -- --part <型号>。
 */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,6 +25,12 @@ const PROJECT_ROOT = fileURLToPath(new URL("../", import.meta.url));
 /* 桌面版装在 Program Files 下，工程目录没有写权限，缓存改落到用户数据目录，
    由 electron/main.mjs 通过 createMcuMiddleware({ cacheDir }) 传进来。 */
 const DEFAULT_CACHE_DIR = path.join(PROJECT_ROOT, ".cache", "mcus");
+const DEFAULT_SETTINGS_FILE = path.join(PROJECT_ROOT, ".cache", "libraries.json");
+
+/* 不依赖本机厂商库、随仓库提交的按需器件（tools/data/cubemx2）。界面据此判断
+   没装 CubeMX 时哪些型号仍然可用，所以和 convert() 里的分支共用一份。 */
+const BUNDLED_PREFIXES = ["STM32C5"];
+const isBundled = (part) => BUNDLED_PREFIXES.some((prefix) => part?.toUpperCase().startsWith(prefix));
 
 /* 厂商库的定位和转换器都比较重（要读几百 KB 的 XML/JSON 并 import 求解器），
    而多数会话根本不会用到，所以推迟到第一次请求时再加载。 */
@@ -33,22 +39,124 @@ let tiLib = null;
 let smokeLib = null;
 const roots = new Map();
 
+/*
+  用户在界面里指定的库路径（null = 自动检测）。存到 settingsFile，下次启动还在。
+
+  ── 为什么不用环境变量 ─────────────────────────────────────────────
+  CUBEMX_DB / SYSCONFIG_HOME 照样认（自动检测的一部分），但从 Releases 装桌面版的
+  人不会去设环境变量。库装在非默认位置时，唯一现实的入口是界面里的一个路径框。
+*/
+const libraryPaths = { st: null, ti: null };
+
+/* 用户选的目录常常比库目录高一两层：选了 STM32CubeMX 安装目录而不是其下的 db，
+   选了 C:/ti 而不是 sysconfig_1.x。在这里往下找一层，免得白白报"找不到"。 */
+async function normalizeLibraryPath(vendor, input) {
+  const base = path.resolve(input.trim());
+  if (vendor === "st") {
+    for (const candidate of [base, path.join(base, "db")]) {
+      if (existsSync(path.join(candidate, "mcu"))) return candidate;
+    }
+    return base;
+  }
+  if (existsSync(path.join(base, "gpns.json")) || existsSync(path.join(base, "dist", "deviceData"))) return base;
+  const versions = existsSync(base)
+    ? (await readdir(base)).filter((name) => name.startsWith("sysconfig_"))
+      .sort((left, right) => right.localeCompare(left, undefined, { numeric: true }))
+    : [];
+  return versions.length ? path.join(base, versions[0]) : base;
+}
+
+async function resolveRoot(vendor) {
+  if (vendor === "st") {
+    if (!stm32Lib) stm32Lib = await import("./lib/stm32.mjs");
+    return stm32Lib.resolveDb(libraryPaths.st || undefined);
+  }
+  if (!tiLib) tiLib = await import("./lib/ti.mjs");
+  return tiLib.resolveDeviceData(libraryPaths.ti || undefined);
+}
+
 async function loadStm32() {
-  if (!stm32Lib) stm32Lib = await import("./lib/stm32.mjs");
-  if (!roots.has("st")) roots.set("st", await stm32Lib.resolveDb());
+  if (!roots.has("st")) roots.set("st", await resolveRoot("st"));
   return { lib: stm32Lib, root: roots.get("st") };
 }
 
 async function loadTi() {
-  if (!tiLib) tiLib = await import("./lib/ti.mjs");
-  if (!roots.has("ti")) roots.set("ti", await tiLib.resolveDeviceData());
+  if (!roots.has("ti")) roots.set("ti", await resolveRoot("ti"));
   return { lib: tiLib, root: roots.get("ti") };
+}
+
+async function libraryStatus() {
+  const status = { bundledPrefixes: BUNDLED_PREFIXES };
+  for (const vendor of ["st", "ti"]) {
+    try {
+      status[vendor] = { ok: true, path: await resolveRoot(vendor), configured: libraryPaths[vendor] };
+    } catch (error) {
+      status[vendor] = { ok: false, path: null, configured: libraryPaths[vendor], error: error.message };
+    }
+  }
+  return status;
+}
+
+function loadLibrarySettings(settingsFile) {
+  try {
+    const stored = JSON.parse(readFileSync(settingsFile, "utf8"));
+    for (const vendor of ["st", "ti"]) libraryPaths[vendor] = typeof stored[vendor] === "string" ? stored[vendor] : null;
+  } catch {
+    /* 没有设置文件就是全部自动检测 */
+  }
+}
+
+async function readJsonBody(request) {
+  const chunks = [];
+  for await (const chunk of request) chunks.push(chunk);
+  return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+}
+
+/* POST { st?: string|null, ti?: string|null }。字符串 = 指定路径，null = 改回自动检测。
+   指定的路径找不到库就拒绝保存，不留一个注定失败的设置。 */
+async function updateLibraries(request, response, settingsFile) {
+  /* 只收 application/json：跨站页面发不出这种请求而不先过预检，
+     而这个服务不回 CORS 头，预检必败——挡掉别的网页偷偷改本机设置。 */
+  if (!String(request.headers["content-type"] || "").startsWith("application/json")) {
+    return sendJson(response, 415, { error: "需要 application/json" });
+  }
+  let body;
+  try {
+    body = await readJsonBody(request);
+  } catch {
+    return sendJson(response, 400, { error: "请求体不是合法 JSON" });
+  }
+  const next = { ...libraryPaths };
+  for (const vendor of ["st", "ti"]) {
+    if (!(vendor in body)) continue;
+    const value = body[vendor];
+    if (value !== null && (typeof value !== "string" || !value.trim())) {
+      return sendJson(response, 400, { error: "路径必须是非空字符串或 null" });
+    }
+    next[vendor] = value === null ? null : await normalizeLibraryPath(vendor, value);
+  }
+  const previous = { ...libraryPaths };
+  Object.assign(libraryPaths, next);
+  roots.clear();
+  for (const vendor of ["st", "ti"]) {
+    if (!(vendor in body) || next[vendor] === null) continue;
+    try {
+      await resolveRoot(vendor);
+    } catch (error) {
+      Object.assign(libraryPaths, previous);
+      /* 只取第一行"找不到…试过：…"，后面那句"用 --db 指定"是给命令行看的 */
+      return sendJson(response, 400, { error: error.message.split("\n")[0], vendor });
+    }
+  }
+  await mkdir(path.dirname(settingsFile), { recursive: true });
+  await writeFile(settingsFile, `${JSON.stringify(libraryPaths, null, 2)}\n`, "utf8");
+  return sendJson(response, 200, await libraryStatus());
 }
 
 async function convert(query) {
   const { vendor, part, package: packageName } = query;
   if (vendor === "st") {
-    if (/^STM32C5/i.test(part)) {
+    if (isBundled(part)) {
       const { loadCubeMx2 } = await import("./lib/cubemx2.mjs");
       return loadCubeMx2(query.id);
     }
@@ -91,10 +199,14 @@ function sendJson(response, status, body) {
   response.end(text);
 }
 
-async function handle(request, response, next, { cacheDir, mode }) {
+async function handle(request, response, next, { cacheDir, mode, settingsFile }) {
   const url = new URL(request.url, "http://127.0.0.1");
   if (url.pathname === "/api/planner-instance") {
     return sendJson(response, 200, { app: "MCU-Planner", root: PROJECT_ROOT, mode });
+  }
+  if (url.pathname === "/api/libraries") {
+    if (request.method === "POST") return updateLibraries(request, response, settingsFile);
+    return sendJson(response, 200, await libraryStatus());
   }
   if (url.pathname !== "/api/mcu") return next();
 
@@ -132,9 +244,10 @@ async function handle(request, response, next, { cacheDir, mode }) {
 }
 
 /* connect 风格的 (req, res, next)，Vite 和桌面版的内置 http 服务共用这一份。 */
-export function createMcuMiddleware({ cacheDir = DEFAULT_CACHE_DIR, mode = "source" } = {}) {
+export function createMcuMiddleware({ cacheDir = DEFAULT_CACHE_DIR, mode = "source", settingsFile = DEFAULT_SETTINGS_FILE } = {}) {
+  loadLibrarySettings(settingsFile);
   return (request, response, next) => {
-    handle(request, response, next, { cacheDir, mode }).catch((error) => sendJson(response, 500, { error: String(error) }));
+    handle(request, response, next, { cacheDir, mode, settingsFile }).catch((error) => sendJson(response, 500, { error: String(error) }));
   };
 }
 

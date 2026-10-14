@@ -18,7 +18,7 @@
     "mcu:catalog": "node tools/build-device-index.mjs",
     "mcu:import": "node tools/import-stm32.mjs",
     "mcu:import:ti": "node tools/import-ti.mjs",
-    "test": "node tools/build-mcu-index.mjs --check && node tests/package.mjs && node tests/verify.mjs && node tests/export.mjs && node tests/fanout.mjs && node tests/netlabels.mjs && node tests/project.mjs && node tests/deviceSearch.mjs && node tests/usageSearch.mjs && node tests/tiPeripherals.mjs && node tests/feasibility.mjs && node tests/capabilities.mjs && node tests/searchSpec.mjs && node tests/render.mjs && node tests/peripheralGuides.mjs",
+    "test": "node tools/build-mcu-index.mjs --check && node tests/package.mjs && node tests/verify.mjs && node tests/export.mjs && node tests/fanout.mjs && node tests/netlabels.mjs && node tests/project.mjs && node tests/deviceSearch.mjs && node tests/usageSearch.mjs && node tests/tiPeripherals.mjs && node tests/feasibility.mjs && node tests/capabilities.mjs && node tests/searchSpec.mjs && node tests/render.mjs && node tests/peripheralGuides.mjs && node tests/libraries.mjs && node tests/undoHistory.mjs",
     "app:start": "vite build && electron .",
     "app:dist": "vite build && electron-builder --win --publish never",
     "app:release": "vite build && electron-builder --win --publish always"

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { STORAGE_KEYS, clearStorage, forgetMcu, storageUsage } from "../lib/preferences.js";
 import { MCU_CATALOG, catalogLabel } from "../lib/mcuCatalog.js";
 import AppUpdateSection from "./AppUpdateSection.jsx";
+import LibrarySettingsSection from "./LibrarySettingsSection.jsx";
 
 /*
   个人中心：本地偏好与记录。
@@ -44,6 +45,8 @@ export default function PersonalCenter({
   resolvedTheme,
   onThemeChange,
   aiConfigured,
+  libraryStatus,
+  onLibraryStatusChange,
   onPickRecent,
   currentMcuId,
 }) {
@@ -88,6 +91,8 @@ export default function PersonalCenter({
         </p>
 
         <AppUpdateSection open={open} />
+
+        <LibrarySettingsSection status={libraryStatus} onStatusChange={onLibraryStatusChange} />
 
         <section>
           <h3>外观</h3>

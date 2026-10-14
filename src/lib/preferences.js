@@ -37,6 +37,8 @@ const DEFAULTS = {
   recentMcus: [],
   /* 新手教程是否已经看过（看过就不再自动弹） */
   tourSeen: false,
+  /* 缺厂商库的提示点过"不再提示" */
+  libraryNoticeDismissed: false,
 };
 
 const RECENT_LIMIT = 8;

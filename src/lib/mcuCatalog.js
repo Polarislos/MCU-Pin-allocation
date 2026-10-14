@@ -87,6 +87,50 @@ export function isMcuLoaded(id) {
 }
 
 /*
+  本机厂商库的检测结果（见 tools/vite-mcu-server.mjs 的 /api/libraries）。
+
+  从 Releases 装桌面版的人多半没装 CubeMX / SysConfig，选择器里三千多颗绝大部分
+  转换不出来。与其让人点进详情、按下"用于引脚规划"才看到报错，不如在列表里
+  就标出来，并指到设置入口。
+
+  返回 { server: false } = 没有本地服务（静态部署），按需器件全部不可用。
+*/
+export async function fetchLibraryStatus() {
+  try {
+    const response = await fetch("/api/libraries");
+    if (!response.ok) return { server: false };
+    return { server: true, ...(await response.json()) };
+  } catch {
+    return { server: false };
+  }
+}
+
+/* patch: { st?: string|null, ti?: string|null }。失败时抛出服务端给的原因。 */
+export async function saveLibraryPaths(patch) {
+  const response = await fetch("/api/libraries", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `保存失败（HTTP ${response.status}）`);
+  return { server: true, ...payload };
+}
+
+export const LIBRARY_NAMES = { st: "STM32CubeMX", ti: "TI SysConfig" };
+
+/* 这颗片子在本机能不能取到引脚数据。status 还没取回来时一律当作可用——
+   宁可点了再报错，也不要在检测完成前把整页都标成灰色。 */
+export function deviceAvailability(device, status) {
+  if (loaded.has(device.id) || MCU_CATALOG.some((item) => item.id === device.id)) return { ok: true };
+  if (!status) return { ok: true };
+  if (!status.server) return { ok: false, reason: "当前部署没有本地服务，只能使用内置型号" };
+  if (status.bundledPrefixes?.some((prefix) => device.part?.toUpperCase().startsWith(prefix))) return { ok: true };
+  if (status[device.vendor]?.ok) return { ok: true };
+  return { ok: false, reason: `本机未找到 ${LIBRARY_NAMES[device.vendor] || device.vendor} 器件库`, vendor: device.vendor };
+}
+
+/*
   从本地服务器取一颗按需器件。
 
   失败原因必须原样透出：本机没装 CubeMX、这颗片子的封装形态转换不出来、

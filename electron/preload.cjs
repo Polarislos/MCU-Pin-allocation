@@ -17,3 +17,7 @@ contextBridge.exposeInMainWorld("appUpdater", {
     return () => ipcRenderer.removeListener("updater:state", listener);
   },
 });
+
+contextBridge.exposeInMainWorld("desktopShell", {
+  pickFolder: (title) => ipcRenderer.invoke("dialog:pickFolder", title),
+});

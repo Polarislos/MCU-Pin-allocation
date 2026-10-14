@@ -15,13 +15,15 @@ import {
 } from "./lib/peripherals.js";
 import { packageLayout } from "./lib/package.js";
 import {
-  DEFAULT_MCU_ID, MCU_CATALOG, catalogLabel, ensureMcuLoaded, fetchRuntimeMcu, getMcuById, isMcuLoaded,
+  DEFAULT_MCU_ID, LIBRARY_NAMES, MCU_CATALOG, catalogLabel, deviceAvailability, ensureMcuLoaded, fetchLibraryStatus,
+  fetchRuntimeMcu, getMcuById, isMcuLoaded,
 } from "./lib/mcuCatalog.js";
 import { MODULE_CATALOG } from "./data/moduleCatalog.js";
 import { analysisToRequestRows, analyzeRequirementsText } from "./lib/ai/assistant.js";
 import { analyzeRequirementsRemote } from "./lib/ai/remote.js";
 import { applyTheme, readThemeMode, resolveTheme, watchAutoTheme, writeThemeMode } from "./lib/theme.js";
 import { readPreferences, rememberMcu, writePreferences } from "./lib/preferences.js";
+import { useUndoHistory } from "./lib/undoHistory.js";
 import Tour from "./components/Tour.jsx";
 import PersonalCenter from "./components/PersonalCenter.jsx";
 import { loadProject, parseProject, projectFileName, projectToJson, serializeProject } from "./lib/project.js";
@@ -35,6 +37,17 @@ import { CAPABILITIES, CAPABILITY_CATEGORIES, capabilityCoverage } from "./lib/c
 
 const AI_CONFIG_STORAGE_KEY = "mcu-pin-planner.ai-config.v1";
 const PROJECT_STORAGE_KEY = "mcu-pin-planner.project.v1";
+/* 撤销历史按这几样算"一次编辑"；求解结果跟着记，但单独变化不算一步 */
+const UNDO_INPUT_KEYS = ["requests", "options", "excludedPins", "lockedGroups"];
+
+/* 焦点在文本框里时，Ctrl+Z 留给文本框自己的撤销。下拉框和勾选框没有自己的撤销，
+   而改完需求行之后焦点正停在它们上面——那时按 Ctrl+Z 就该撤销刚才那次修改。 */
+const NON_TEXT_INPUTS = new Set(["checkbox", "radio", "button", "submit", "reset", "range", "color", "file"]);
+function isTextEditing(target) {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable || target.tagName === "TEXTAREA") return true;
+  return target.tagName === "INPUT" && !NON_TEXT_INPUTS.has(target.type);
+}
 
 /*
   挂载前要预加载哪颗片子的引脚表。只解析出 mcuId，不做完整校验——
@@ -418,7 +431,7 @@ function ThemeSwitch({ mode, resolved, onChange }) {
   );
 }
 
-function McuSelector({ catalog, selectedId, onChange, onPick, loading, notice, projectRequests = [], onGuide, guideSearch, pageOpen, onOpenPage, onClosePage, onNavigate }) {
+function McuSelector({ catalog, selectedId, onChange, onPick, loading, notice, projectRequests = [], onGuide, guideSearch, pageOpen, onOpenPage, onClosePage, onNavigate, libraryStatus, onOpenLibrarySettings }) {
   const [initialSearch] = useState(readMcuSearchState);
   const [browsing, setBrowsing] = useState(false);
   const [index, setIndex] = useState(null);
@@ -1156,6 +1169,7 @@ function McuSelector({ catalog, selectedId, onChange, onPick, loading, notice, p
                             <em>{device.series}{device.core ? ` · ${device.core}` : ""}{hasPeripheralData(device) ? "" : " · 外设数据未收录"}</em>
                             {hits.length > 0 && <em className={view === "incomplete" ? "mcu-hit is-missing" : "mcu-hit"}>{hits.map(describeHit).join(" · ")}</em>}
                             {unknown?.length > 0 && <em className="mcu-hit is-unknown">数据未知：{unknown.map((condition) => conditionLabel(condition)).join("、")}</em>}
+                            {!deviceAvailability(device, libraryStatus).ok && <em className="mcu-hit is-unavailable">{deviceAvailability(device, libraryStatus).reason}，暂不能用于规划</em>}
                             <em className="mcu-use">查看详情 →</em>
                             {canCheck && feasibilityOf(device) && <FeasibilityLine entry={feasibilityOf(device)} debugKept={protectDebug} />}
                           </button>
@@ -1174,8 +1188,10 @@ function McuSelector({ catalog, selectedId, onChange, onPick, loading, notice, p
                               <button
                                 type="button"
                                 className="mcu-check"
-                                disabled={feasibilityOf(device)?.status === "running"}
-                                title="把这些条件交给引脚求解器，在这颗片子的完整引脚表上一起分配"
+                                disabled={feasibilityOf(device)?.status === "running" || !deviceAvailability(device, libraryStatus).ok}
+                                title={deviceAvailability(device, libraryStatus).ok
+                                  ? "把这些条件交给引脚求解器，在这颗片子的完整引脚表上一起分配"
+                                  : deviceAvailability(device, libraryStatus).reason}
                                 onClick={() => runCheck(device)}
                               >
                                 {feasibilityOf(device) ? "重查" : "检查组合"}
@@ -1249,10 +1265,18 @@ function McuSelector({ catalog, selectedId, onChange, onPick, loading, notice, p
                       : `${vendorLabel(selectedResult.device.vendor)} 本地数据源未提供这些规格字段`}</span>
                     <small>规格未收录不代表数值为 0 或器件不支持。RAM 阈值只按 CubeMX Ram 字段；CCM RAM 单列。外设实例数不代表通道数。</small>
                   </div>
+                  {!deviceAvailability(selectedResult.device, libraryStatus).ok && (
+                    <p className="mcu-browser-note warn mcu-detail-unavailable">
+                      {deviceAvailability(selectedResult.device, libraryStatus).reason}，转换不出引脚数据。
+                      {libraryStatus?.server && (
+                        <button type="button" className="linklike" onClick={onOpenLibrarySettings}>设置器件库路径</button>
+                      )}
+                    </p>
+                  )}
                   <button
                     type="button"
                     className="primary-button mcu-detail-use"
-                    disabled={loading}
+                    disabled={loading || !deviceAvailability(selectedResult.device, libraryStatus).ok}
                     onClick={async () => {
                       const loaded = await onPick(selectedResult.device);
                       if (loaded !== false) onClosePage?.();
@@ -2315,6 +2339,21 @@ function App() {
   const [preferences, setPreferences] = useState(readPreferences);
   const [centerOpen, setCenterOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
+  /* 本机厂商库的检测结果。null = 还在查；选择器在查完之前不标灰任何型号。 */
+  const [libraryStatus, setLibraryStatus] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetchLibraryStatus().then((status) => { if (alive) setLibraryStatus(status); });
+    return () => { alive = false; };
+  }, []);
+
+  /* 缺库提示。只在有本地服务时出现（静态部署本来就没有按需器件，提示了也
+     没处可设）；点"不再提示"后记进偏好。 */
+  const missingLibraries = libraryStatus?.server
+    ? ["st", "ti"].filter((vendor) => !libraryStatus[vendor]?.ok)
+    : [];
+  const showLibraryNotice = missingLibraries.length > 0 && !preferences.libraryNoticeDismissed;
 
   function updatePreferences(patch) {
     /* patch 为 null = 调用方已经自己写过盘（比如 forgetMcu / clearStorage），
@@ -2410,6 +2449,44 @@ function App() {
 
   const currentSignature = inputSignature(requests, options, excludedPins, lockedGroups);
   const isStale = Boolean(result) && resultSignature !== null && resultSignature !== currentSignature;
+
+  /* 撤销 / 重做。见 lib/undoHistory.js：换 MCU 清空历史，求解结果随快照一起回退。 */
+  const undoHistory = useUndoHistory(
+    { requests, options, excludedPins, lockedGroups, result, resultSignature, activeIndex },
+    { inputKeys: UNDO_INPUT_KEYS, scope: selectedMcuId, restore: restoreSnapshot },
+  );
+
+  function restoreSnapshot(snapshot) {
+    /* 丢掉还在路上的求解结果，否则它回来时会盖掉刚恢复的方案 */
+    requestIdRef.current += 1;
+    setPending(false);
+    setRequests(snapshot.requests);
+    setOptions(snapshot.options);
+    setExcludedPins(snapshot.excludedPins);
+    setLockedGroups(snapshot.lockedGroups);
+    setResult(snapshot.result);
+    setResultSignature(snapshot.resultSignature);
+    setActiveIndex(snapshot.activeIndex);
+    setHighlightedPeripheral(null);
+  }
+
+  const undoRef = useRef(undoHistory);
+  undoRef.current = undoHistory;
+  useEffect(() => {
+    function onKeyDown(event) {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || isTextEditing(event.target)) return;
+      const key = event.key.toLowerCase();
+      if (key === "z" && !event.shiftKey) {
+        event.preventDefault();
+        undoRef.current.undo();
+      } else if ((key === "z" && event.shiftKey) || key === "y") {
+        event.preventDefault();
+        undoRef.current.redo();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   /* 自动保存当前工程。刷新即丢是这个工具最大的短板——不能存就没法评审、
      没法分享、没法对比两版方案。写失败（隐私模式、配额满）不影响使用。 */
@@ -2862,9 +2939,13 @@ function App() {
             onOpenPage={() => openMcuSearch()}
             onClosePage={closeMcuSearch}
             onNavigate={navigatePage}
+            libraryStatus={libraryStatus}
+            onOpenLibrarySettings={() => setCenterOpen(true)}
           />
           <div className="project-tools">
             <span>工程</span>
+            <button type="button" className="icon-button" onClick={undoHistory.undo} disabled={!undoHistory.canUndo} aria-label="撤销" title="撤销（Ctrl+Z）">↶</button>
+            <button type="button" className="icon-button" onClick={undoHistory.redo} disabled={!undoHistory.canRedo} aria-label="重做" title="重做（Ctrl+Y / Ctrl+Shift+Z）">↷</button>
             <button type="button" onClick={saveProject}>保存</button>
             <button type="button" onClick={() => projectFileRef.current?.click()}>载入</button>
             <button type="button" onClick={resetProject}>重置</button>
@@ -2901,6 +2982,18 @@ function App() {
           </div>
         </div>
       </header>
+      {showLibraryNotice && activePage !== "peripherals" && (
+        <p className="project-notice project-notice-warn library-notice" aria-live="polite">
+          <span>
+            本机未检测到 {missingLibraries.map((vendor) => LIBRARY_NAMES[vendor]).join(" 和 ")} 器件库：
+            选型页里这些厂商的型号暂时转换不出引脚数据（内置型号和 STM32C5 不受影响）。
+          </span>
+          <span className="library-notice-actions">
+            <button type="button" className="linklike" onClick={() => setCenterOpen(true)}>设置器件库</button>
+            <button type="button" className="linklike" onClick={() => updatePreferences({ libraryNoticeDismissed: true })}>不再提示</button>
+          </span>
+        </p>
+      )}
       {projectNotice && activePage === "planner" && (
         <p className={`project-notice project-notice-${projectNotice.kind}`} aria-live="polite">
           {projectNotice.text}
@@ -3167,6 +3260,8 @@ function App() {
         resolvedTheme={resolvedTheme}
         onThemeChange={handleThemeChange}
         aiConfigured={Boolean(readAiConfig().endpoint)}
+        libraryStatus={libraryStatus}
+        onLibraryStatusChange={setLibraryStatus}
         currentMcuId={selectedMcuId}
         onPickRecent={(item) => {
           setCenterOpen(false);
