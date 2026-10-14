@@ -1,0 +1,46 @@
+# 发布桌面版。
+#
+# 流程：npm version patch|minor|major → git push --follow-tags
+# 推送 v* 标签后，这里在 Windows 上跑测试、打 NSIS 安装包，并把
+#   MCU-Pin-Planner-Setup-<版本>.exe / .blockmap / latest.yml
+# 上传到同名 GitHub Release。已安装的客户端读 latest.yml 判断有没有新版本。
+#
+# 标签必须和 package.json 的 version 一致（npm version 会同时改两处），
+# 否则 electron-builder 会把文件传到另一个 Release 上。
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Check tag matches package.json
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "标签 $GITHUB_REF_NAME 与 package.json 版本 $version 不一致" >&2
+            exit 1
+          fi
+
+      - run: npm ci
+
+      - run: npm test
+
+      - name: Build and publish
+        run: npm run app:release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

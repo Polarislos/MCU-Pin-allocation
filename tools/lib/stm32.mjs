@@ -507,7 +507,9 @@ function buildDevice({ mcu, gpio, part, uiProfile }) {
   const packageName = mcu.package;
   const device = {
     id: `st-${part.toLowerCase()}-${packageName.toLowerCase()}`,
-    partNumber: part.toUpperCase(),
+    /* 小写 x 是 CubeMX 的等级占位符（STM32F407VGTx），不能大写成字母 X——那会把
+       "这一档里任意等级"写成一个看似确定的订货型号。真实订货号里没有字母 X。 */
+    partNumber: part.replace(/[a-wyz]/g, (letter) => letter.toUpperCase()),
     vendor: "STMicroelectronics",
     family: mcu.line || mcu.family,
     core: mcu.core.replace(/^Arm /, "ARM "),

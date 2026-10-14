@@ -332,7 +332,17 @@ function buildDevice({ data, packageName, part, args }) {
 
 /* ── 对外入口 ─────────────────────────────────────────────────────── */
 
-export { resolveDeviceData, packageInfoOf };
+export { resolveDeviceData, packageInfoOf, translate as translateSignalName };
+
+/* 外设实例名的 datasheet 写法（CANFD0 → CAN0）。系统分组（SYSCTL 等）返回 null。
+   器件索引的外设摘要要用这份名字，否则搜索里的 CAN0 和引脚数据里的对不上。 */
+export function datasheetPeripheralName(name) {
+  for (const [pattern, rewrite] of PERIPHERAL_RULES) {
+    const match = pattern.exec(name);
+    if (match) return rewrite(match);
+  }
+  return name;
+}
 
 /* 型号 → 可选封装。选择器要用它列出一颗片子有哪几种封装。 */
 export async function packagesOf(deviceDataDir, part) {

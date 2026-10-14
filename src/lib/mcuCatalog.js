@@ -116,6 +116,11 @@ export async function fetchRuntimeMcu(entry) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || `器件转换失败（HTTP ${response.status}）`);
 
+  /* 型号以索引里的写法为准：旧版转换器会把占位符 x 大写成 X（STM32F407VGTX），
+     .cache 里存着的那些不会自己变回来。同一型号只是大小写不同时用 entry.part。 */
+  if (entry.part && payload.device.partNumber?.toUpperCase() === entry.part.toUpperCase()) {
+    payload.device.partNumber = entry.part;
+  }
   const record = {
     id: payload.device.id,
     partNumber: payload.device.partNumber,

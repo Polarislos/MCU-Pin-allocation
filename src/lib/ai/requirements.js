@@ -14,7 +14,7 @@ export const AI_ASSISTANT_TOOLS = [
   "solve_pin_plan",
 ];
 
-export const AI_REQUEST_TYPES = ["SPI", "I2C", "UART", "FDCAN", "SDMMC", "QUADSPI", "USB", "ETH", "TIM", "ADC", "DAC"];
+export const AI_REQUEST_TYPES = ["SPI", "I2C", "UART", "FDCAN", "SDMMC", "QUADSPI", "USB", "ETH", "TIM", "ADC", "DAC", "GPIO"];
 
 export function createRequirementsEnvelope({ mcuId, modules = [], constraints = [], notes = [] } = {}) {
   return {

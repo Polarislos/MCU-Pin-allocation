@@ -1,4 +1,4 @@
-import { DEFINITIONS, usesRemapGroups } from "./allocator.js";
+import { DEFINITIONS, isFiveVoltTolerant, usesRemapGroups } from "./allocator.js";
 
 function variantLabel(group) {
   return DEFINITIONS[group.type]?.variants?.[group.variant]?.label || "";
@@ -11,7 +11,7 @@ function typeLabel(group) {
 /* 模拟通道走的是 additionalFunctions，没有 AF 编号（af === null）。
    四种导出都得显式处理，否则会印出 "AFnull" 这种进了工程才会被发现的脏数据。 */
 function isAnalog(item) {
-  return item.af == null;
+  return item.af == null && !/^GPIO\d+$/.test(item.function || "");
 }
 
 /*
@@ -35,9 +35,66 @@ function afColumnLabel(mcu) {
 }
 
 function afText(mcu, item) {
+  if (/^GPIO\d+$/.test(item.function || "")) return "普通 GPIO";
   if (isAnalog(item)) return "模拟";
   if (usesRemapGroups(mcu)) return remapText(item.af);
   return `AF${item.af}`;
+}
+
+const PIN_KIND_LABELS = Object.freeze({
+  gpio: "GPIO",
+  power: "电源",
+  reset: "复位",
+  special: "特殊",
+  supply: "电源",
+});
+
+function csvCell(value) {
+  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+}
+
+function pinKindLabel(kind) {
+  return PIN_KIND_LABELS[kind] || kind || "未知";
+}
+
+function fiveVoltLabel(mcu, pin) {
+  if (pin.kind !== "gpio") return "不适用";
+  const tolerant = isFiveVoltTolerant(mcu, pin);
+  if (tolerant === null) return "未知";
+  return tolerant ? "耐 5V" : "仅 3.3V";
+}
+
+/*
+  完整引脚定义表。它不依赖方案，所以即使还没有点击“生成方案”，也可以把
+  当前 MCU 的整份 pinout 交给原理图 / PCB / 固件整理流程。复用功能保留 AF
+  编号，附加功能则单独列出，避免把 ADC/DAC 这类不在 functions 里的信息丢掉。
+*/
+export function toPinDefinitionsCsv(mcu) {
+  const rows = [[
+    "物理脚", "封装位置", "引脚名", "复位名称", "引脚类型", "I/O类型", "I/O结构",
+    "电平耐受", "默认保护", "复用功能", "附加功能", "备注",
+  ]];
+  const pins = [...(mcu?.pins || [])].sort((left, right) => left.number - right.number);
+  for (const pin of pins) {
+    const functions = (pin.functions || [])
+      .map((item) => `${item.name} (AF${item.af})`)
+      .join(" | ");
+    rows.push([
+      pin.number,
+      designatorOf(pin),
+      pin.name,
+      pin.resetName || "",
+      pinKindLabel(pin.kind),
+      pin.ioType || "",
+      pin.ioStructure || "",
+      fiveVoltLabel(mcu, pin),
+      (pin.protection || []).join(" | "),
+      functions,
+      (pin.additionalFunctions || []).join(" | "),
+      pin.notes || "",
+    ]);
+  }
+  return `﻿${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}`;
 }
 
 /* 展平成一行一个引脚，四种导出格式共用。按物理脚号排序——
@@ -204,9 +261,10 @@ export function toHeader(mcu, solution) {
         `#define ${`${base}_Pin`.padEnd(width)}GPIO_PIN_${bit}`,
         `#define ${`${base}_GPIO_Port`.padEnd(width)}GPIO${port}`,
       );
-      /* 模拟脚不走复用功能，配成 GPIO_MODE_ANALOG 即可，没有 AF 宏可写。 */
-      if (isAnalog(item)) lines.push(`/* ${base}: GPIO_MODE_ANALOG, 无复用功能 */`);
-      else if (!remapStyle) lines.push(`#define ${`${base}_AF`.padEnd(width)}GPIO_AF${item.af}_${group.instance}  /* AF${item.af} */`);
+       /* 模拟脚不走复用功能，配成 GPIO_MODE_ANALOG 即可，没有 AF 宏可写。 */
+       if (isAnalog(item)) lines.push(`/* ${base}: GPIO_MODE_ANALOG, 无复用功能 */`);
+       else if (/^GPIO\d+$/.test(base)) lines.push(`/* ${base}: 普通 GPIO，请按实际方向配置 */`);
+       else if (!remapStyle) lines.push(`#define ${`${base}_AF`.padEnd(width)}GPIO_AF${item.af}_${group.instance}  /* AF${item.af} */`);
     }
     lines.push("");
   }
@@ -327,6 +385,16 @@ export function downloadSolution(mcu, solution, formatId) {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = `${mcu.partNumber}-pin-plan.${format.extension}`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+export function downloadPinDefinitions(mcu) {
+  const blob = new Blob([toPinDefinitionsCsv(mcu)], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${mcu.partNumber}-pin-definitions.csv`;
   anchor.click();
   URL.revokeObjectURL(url);
 }

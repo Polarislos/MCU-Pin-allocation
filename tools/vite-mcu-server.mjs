@@ -22,7 +22,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const PROJECT_ROOT = fileURLToPath(new URL("../", import.meta.url));
-const CACHE_DIR = path.join(PROJECT_ROOT, ".cache", "mcus");
+/* 桌面版装在 Program Files 下，工程目录没有写权限，缓存改落到用户数据目录，
+   由 electron/main.mjs 通过 createMcuMiddleware({ cacheDir }) 传进来。 */
+const DEFAULT_CACHE_DIR = path.join(PROJECT_ROOT, ".cache", "mcus");
 
 /* 厂商库的定位和转换器都比较重（要读几百 KB 的 XML/JSON 并 import 求解器），
    而多数会话根本不会用到，所以推迟到第一次请求时再加载。 */
@@ -46,6 +48,10 @@ async function loadTi() {
 async function convert(query) {
   const { vendor, part, package: packageName } = query;
   if (vendor === "st") {
+    if (/^STM32C5/i.test(part)) {
+      const { loadCubeMx2 } = await import("./lib/cubemx2.mjs");
+      return loadCubeMx2(query.id);
+    }
     const { lib, root } = await loadStm32();
     const { device } = await lib.importStm32({ db: root, part });
     return device;
@@ -85,8 +91,11 @@ function sendJson(response, status, body) {
   response.end(text);
 }
 
-async function handle(request, response, next) {
+async function handle(request, response, next, { cacheDir, mode }) {
   const url = new URL(request.url, "http://127.0.0.1");
+  if (url.pathname === "/api/planner-instance") {
+    return sendJson(response, 200, { app: "MCU-Planner", root: PROJECT_ROOT, mode });
+  }
   if (url.pathname !== "/api/mcu") return next();
 
   const query = Object.fromEntries(url.searchParams);
@@ -95,7 +104,7 @@ async function handle(request, response, next) {
     return sendJson(response, 400, { error: "缺少 id / vendor / part" });
   }
 
-  const cacheFile = path.join(CACHE_DIR, `${id}.json`);
+  const cacheFile = path.join(cacheDir, `${id}.json`);
   if (existsSync(cacheFile)) {
     const device = JSON.parse(await readFile(cacheFile, "utf8"));
     return sendJson(response, 200, { device, warnings: await warningsFor(device), cached: true });
@@ -111,7 +120,7 @@ async function handle(request, response, next) {
         error: `索引里的 id「${id}」与转换结果「${device.id}」不一致，请重新生成索引（npm run mcu:catalog）`,
       });
     }
-    await mkdir(CACHE_DIR, { recursive: true });
+    await mkdir(cacheDir, { recursive: true });
     await writeFile(cacheFile, `${JSON.stringify(device, null, 2)}\n`, "utf8");
     const warnings = await warningsFor(device);
     console.log(`[mcu] ${id} 转换完成 ${Date.now() - started}ms${warnings.length ? ` （${warnings.length} 条提示）` : ""}`);
@@ -122,10 +131,15 @@ async function handle(request, response, next) {
   }
 }
 
-export function mcuOnDemand() {
-  const middleware = (request, response, next) => {
-    handle(request, response, next).catch((error) => sendJson(response, 500, { error: String(error) }));
+/* connect 风格的 (req, res, next)，Vite 和桌面版的内置 http 服务共用这一份。 */
+export function createMcuMiddleware({ cacheDir = DEFAULT_CACHE_DIR, mode = "source" } = {}) {
+  return (request, response, next) => {
+    handle(request, response, next, { cacheDir, mode }).catch((error) => sendJson(response, 500, { error: String(error) }));
   };
+}
+
+export function mcuOnDemand() {
+  const middleware = createMcuMiddleware();
   return {
     name: "mcu-on-demand",
     configureServer(server) { server.middlewares.use(middleware); },

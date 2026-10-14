@@ -16,6 +16,7 @@ const DIRECT_PROTOCOLS = [
   { type: "TIM", aliases: ["timer", "tim", "pwm", "定时器", "脉宽"] },
   { type: "ADC", aliases: ["adc", "模拟输入", "模数", "采样通道", "电位器", "热敏"] },
   { type: "DAC", aliases: ["dac", "模拟输出", "数模"] },
+  { type: "GPIO", aliases: ["gpio", "普通 gpio", "普通io", "通用 io", "通用io"] },
 ];
 
 /* 模拟需求的"N 路"是**一行 N 通道**，不是 N 行。求解器禁止同一实例被两行
@@ -134,9 +135,9 @@ export function analyzeRequirementsText(input, { mcuId = null } = {}) {
     if (!hasAny(text, protocol.aliases)) continue;
     const { count, explicit } = protocolCount(text, protocol.aliases);
     if (!moduleTypes.has(protocol.type) || extraRequested || (explicit && !resolvedModules.length)) {
-      const analog = DEFINITIONS[protocol.type].family === "analog";
-      const rows = analog ? 1 : count;
-      const variant = analog
+      const channelGroup = DEFINITIONS[protocol.type].family === "analog" || protocol.type === "GPIO";
+      const rows = channelGroup ? 1 : count;
+      const variant = channelGroup
         ? analogVariantForCount(protocol.type, count)
         : DEFINITIONS[protocol.type].defaultVariant;
       for (let index = 0; index < rows; index += 1) {
@@ -147,7 +148,9 @@ export function analyzeRequirementsText(input, { mcuId = null } = {}) {
           side: null,
           source: "direct",
           sourceLabel: "直接需求",
-          role: analog ? "用户指定模拟通道" : "用户指定接口",
+          role: protocol.type === "GPIO"
+            ? "用户指定普通 GPIO"
+            : channelGroup ? "用户指定模拟通道" : "用户指定接口",
         });
       }
     }

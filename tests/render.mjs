@@ -59,6 +59,11 @@ try {
     onRerun: () => {},
   }));
 
+  const lockedSolutionGroups = app.updateSolutionLocks([], result.solutions[0], true);
+  assert.equal(lockedSolutionGroups.length, result.solutions[0].groups.length, "一键锁定应覆盖当前方案全部分组");
+  assert.ok(lockedSolutionGroups.every((group) => group.locked), "一键锁定的分组应带 locked 标记");
+  assert.deepEqual(app.updateSolutionLocks(lockedSolutionGroups, result.solutions[0], false), [], "解除本方案锁定应移除全部分组锁");
+
   const catalog = buildPeripheralCatalog(mcu, "stm32-cube");
   const spi1 = catalog.flatMap((category) => category.items).find((item) => item.id === "SPI1");
   inspectorHtml = renderToString(createElement(app.PeripheralInspector, {
@@ -235,7 +240,7 @@ try {
 assert.ok(html.length > 5000, "渲染结果过短，组件树可能提前中断");
 
 // 默认三路需求行都在，且每行都有接线/实例/方位三个下拉
-for (const needle of ["接口需求", "自动选择", "不限方位", "生成方案", "选择 MCU", "STM32H743VIT6"]) {
+for (const needle of ["接口需求", "自动选择", "不限方位", "生成方案", "导出全部引脚 CSV", "选择 MCU", "STM32H743VIT6"]) {
   assert.ok(html.includes(needle), `界面缺少「${needle}」`);
 }
 /* 5V 用的是勾选框不是下拉，所以这个数不该变；DiffPanel 只在有求解结果时挂载，
@@ -363,5 +368,6 @@ assert.ok(!bgaHtml.includes("undefined"), "BGA 渲染出 undefined");
 console.log(`Rendered App.jsx: ${html.length} bytes, ${pinCount} pins, ${selectCount} selects.`);
 console.log("Rendered dual (TSSOP20) and grid (TFBGA16) package layouts.");
 console.log(`Rendered SolutionPanel: ${assignmentCount} assignments; PeripheralInspector: pinned state ok.`);
+assert.ok(solutionHtml.includes("锁定本方案引脚"), "方案面板缺少一键锁定全部方案引脚入口");
 console.log("Rendered DiffPanel and PinInspector: plan diff rows and 5V tolerance annotation ok.");
 console.log("Verified save→restore lifecycle: signature match, restored-plan banner, and stale detection fields.");

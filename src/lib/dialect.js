@@ -75,6 +75,21 @@ const DIALECTS = {
           ["RXD1", ["MII_RXD1", "RMII_RXD1"]],
         ],
       },
+      /*
+        以下三条都是"datasheet 写法 vs CubeMX 库写法"的差异。手工录入的固化器件
+        （H743）按 datasheet 写 OTG_HS_DM、SDMMC1_CK，而按需从 CubeMX 库转换的
+        器件写 USB_OTG_HS_DM、SDIO_CK（F4 的老名字）、CAN1_TX（F4/F7 的 bxCAN）。
+        不追加的话，选了一颗按需转换的 F407，USB / SD / CAN 需求都会无解。
+
+        CAN 的实例名只是一层壳：bxCAN 和 FDCAN 在引脚层都是一对 TX/RX，求解器
+        要回答的是"脚够不够、冲不冲突"。H7 这类器件库里根本没有 CAN1_ 开头的
+        信号，追加这条不会让它们匹配到不存在的东西。
+      */
+      USB: { instances: ["USB_OTG_FS", "USB_OTG_HS"] },
+      SDMMC: { instances: ["SDIO"] },
+      FDCAN: { instances: ["CAN\\d+"] },
+      /* 只有一个 bank 的 QUADSPI（L4、F7 部分型号）片选叫 NCS，就是 BK1 的片选 */
+      QUADSPI: { rename: [["NCS", "BK1_NCS"]] },
     },
   },
   /*
@@ -97,6 +112,8 @@ const DIALECTS = {
       USB: {
         instances: ["USB"],
       },
+      /* F103 大容量（RCT6/ZET6）的 SD 卡接口叫 SDIO */
+      SDMMC: { instances: ["SDIO"] },
     },
   },
   "ti-mspm0": {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { STORAGE_KEYS, clearStorage, forgetMcu, storageUsage } from "../lib/preferences.js";
 import { MCU_CATALOG, catalogLabel } from "../lib/mcuCatalog.js";
+import AppUpdateSection from "./AppUpdateSection.jsx";
 
 /*
   个人中心：本地偏好与记录。
@@ -85,6 +86,8 @@ export default function PersonalCenter({
         <p className="sheet-intro">
           所有内容只保存在这台机器的浏览器里，不上传任何地方。共占用 {formatBytes(total)}。
         </p>
+
+        <AppUpdateSection open={open} />
 
         <section>
           <h3>外观</h3>
@@ -210,7 +213,7 @@ export default function PersonalCenter({
           </ul>
           <p className="sheet-note">
             工程也可以导出成 <code>.pinplan.json</code> 文件长期保存，不受这里清除的影响。
-            按需器件的转换缓存在服务器上（<code>.cache/mcus/</code>），不在浏览器里。
+            按需器件的转换缓存在本地服务那边（源码运行时是 <code>.cache/mcus/</code>，桌面版在用户数据目录），不在浏览器里。
           </p>
         </section>
       </div>

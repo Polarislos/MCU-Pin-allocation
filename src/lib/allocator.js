@@ -155,6 +155,19 @@ const DEFINITIONS = {
       },
     },
   },
+  GPIO: {
+    label: "普通 GPIO",
+    protocol: "gpio",
+    family: "gpio",
+    defaultVariant: "io1",
+    variants: {
+      io1: { label: "1 路通用 GPIO", channels: 1 },
+      io2: { label: "2 路通用 GPIO", channels: 2 },
+      io4: { label: "4 路通用 GPIO", channels: 4 },
+      io8: { label: "8 路通用 GPIO", channels: 8 },
+      io16: { label: "16 路通用 GPIO", channels: 16 },
+    },
+  },
   /* 模拟需求说的是"我要 N 路"，具体是哪几条通道由求解器挑——所以变体给
      channels 而不是 signals。通道号最终由被选中的引脚决定。 */
   ADC: {
@@ -180,6 +193,43 @@ const DEFINITIONS = {
     },
   },
 };
+
+/*
+  只给可行性检查用的宽总线类型（见 src/lib/feasibility.js）。
+
+  不放进 DEFINITIONS：那张表决定了界面的"添加接口"按钮和需求行，而 FMC 的
+  接法（SDRAM 行地址、SRAM 地址线、NAND…）组合太多，做成固定变体只会误导。
+  这里只给出实例和信号的匹配规则，所需信号一律由请求的 signals 字段给出。
+
+  LTDC 的实例写两种：CubeMX 库写 LTDC_R0，datasheet 引脚表写 LCD_R0。段码 LCD
+  （LCD_SEG0 / LCD_COM0）也会被 LCD 前缀匹配上，但它没有 R/G/B 信号，凑不出
+  任何 RGB 组合，不影响结果。
+*/
+const BUS_DEFINITIONS = {
+  FMC: { label: "FMC / FSMC", protocol: "fmc", instances: ["FMC", "FSMC"], signals: [".+"], variants: {} },
+  DCMI: { label: "DCMI", protocol: "dcmi", instances: ["DCMI", "DCMIPP"], signals: [".+"], variants: {} },
+  LTDC: { label: "LTDC", protocol: "ltdc", instances: ["LTDC", "LCD"], signals: [".+"], variants: {} },
+};
+
+function definitionOf(type) {
+  return DEFINITIONS[type] || BUS_DEFINITIONS[type] || null;
+}
+
+/*
+  请求可以自带所需信号（request.signals），取代变体表：
+    ["CK", "CMD", "D0"]                      每项一个信号
+    [["NE1", "NE2", "NE3", "NE4"], "NOE"]   数组项是"任选其一"的槽位
+  变体只在 signals 缺省时生效。缓存键要带上信号表，否则两路不同接法的 FMC
+  请求会共用同一个候选池。
+*/
+function requiredSignals(definition, request) {
+  if (Array.isArray(request?.signals) && request.signals.length > 0) return request.signals;
+  return definition?.variants?.[request?.variant]?.signals || null;
+}
+
+function slotOptions(slot) {
+  return Array.isArray(slot) ? slot : [slot];
+}
 
 /* 封装几何全部来自 package.js——求解器打分和界面画图必须用同一份换算，
    否则"靠右"这个偏好在两边指的不是同一条边。 */
@@ -299,7 +349,7 @@ function violatesFiveVolt(mcu, pin, fiveVolt) {
 function indexSignals(mcu, type, options, excluded, fiveVolt) {
   /* 匹配规则和信号改名都由方言层给出——这颗片子叫 SPI0_PICO 还是 SPI1_MOSI，
      求解器不需要知道，它只认规范名。 */
-  const grammar = signalGrammar(mcu, type, DEFINITIONS[type]);
+  const grammar = signalGrammar(mcu, type, definitionOf(type));
   const instances = new Map();
   for (const pin of mcu.pins) {
     if (isUnavailable(pin, options, excluded)) continue;
@@ -342,19 +392,24 @@ const VARIETY_TARGET = 120;
 const NODE_BUDGET = 180000;
 
 function combinationsForInstance(mcu, type, instance, signals, required, limit = COMBO_LIMIT) {
-  if (required.some((signal) => !signals.has(signal))) return { list: [], truncated: false };
+  /* 槽位可以是"任选其一"（见 requiredSignals）：任一备选信号存在即可，
+     候选脚取所有备选的并集，分到哪个就记哪个信号名。 */
+  if (required.some((slot) => !slotOptions(slot).some((signal) => signals.has(signal)))) {
+    return { list: [], truncated: false };
+  }
 
   /* 关键：每个信号的候选脚先按引脚代价升序，让 DFS 从最便宜的分支开始。
      不排序的话枚举顺序就是引脚编号顺序，limit 个名额会被最先撞上的分支
      灌满——例如 TIM1_CH1N 会锁死在 PA7(#31, 占用 ADC 通道) 上，永远轮不到
      紧邻 CH1 的 PE8(#38)。信号越多（ETH 9 个、三相互补 7 个）偏差越大。 */
   const ordered = new Map();
-  for (const signal of required) {
-    ordered.set(signal, [...signals.get(signal)].sort(
+  required.forEach((slot, slotIndex) => {
+    const candidates = slotOptions(slot).flatMap((signal) => signals.get(signal) || []);
+    ordered.set(slotIndex, candidates.sort(
       (left, right) => pinCost(left.pin, type) - pinCost(right.pin, type)
         || left.pin.number - right.pin.number,
     ));
-  }
+  });
 
   /* 整组重映射的器件上，一路外设的所有信号必须同属一个重映射组。见
      afGroupingOf()。在 DFS 里就地剪枝而不是等到叶子再筛：混组的分支一个
@@ -381,8 +436,7 @@ function combinationsForInstance(mcu, type, instance, signals, required, limit =
       results.push(combination);
       return;
     }
-    const signal = required[index];
-    for (const candidate of ordered.get(signal)) {
+    for (const candidate of ordered.get(index)) {
       if (usedPins.has(candidate.pin.number)) continue;
       if (uniformAf && assignments.length > 0 && candidate.af !== assignments[0].af) continue;
       usedPins.add(candidate.pin.number);
@@ -424,6 +478,18 @@ function buildAnalogPools(mcu, type, options, excluded, fiveVolt) {
   return entries;
 }
 
+/* 普通 GPIO 没有 AF/复用功能表，候选就是所有仍可分配的 GPIO。和 ADC 一样，
+   数量在搜索时才从当前剩余引脚里挑，避免先枚举 C(n,k) 造成无意义的组合爆炸。 */
+function buildGpioPool(mcu, options, excluded, fiveVolt) {
+  return mcu.pins
+    .filter((pin) => (
+      pin.kind === "gpio"
+      && !isUnavailable(pin, options, excluded)
+      && !violatesFiveVolt(mcu, pin, fiveVolt)
+    ))
+    .map((pin) => ({ pin }));
+}
+
 /*
   给定"已经被占掉的脚"，现挑一组模拟通道。
 
@@ -435,7 +501,7 @@ function buildAnalogPools(mcu, type, options, excluded, fiveVolt) {
   滑窗给出几组备选，让多套方案之间的模拟通道也有区别。
 */
 function analogCandidatesAt(mcu, request, entry, taken) {
-  const channels = DEFINITIONS[request.type].variants[request.variant]?.channels;
+  const channels = definitionOf(request.type).variants[request.variant]?.channels;
   if (!channels) return { list: [], capped: false };
   const available = entry.pool.filter((candidate) => !taken(candidate.pin.number));
   /* 可用脚不够 channels 个——这是纯计数结论，与滑窗无关，仍然可以拿来证明无解。 */
@@ -479,6 +545,51 @@ function analogCandidatesAt(mcu, request, entry, taken) {
   };
 }
 
+function gpioCandidatesAt(mcu, request, pool, taken) {
+  const channels = definitionOf(request.type).variants[request.variant]?.channels;
+  if (!channels) return { list: [], capped: false };
+  const available = pool.filter((candidate) => !taken(candidate.pin.number));
+  if (available.length < channels) return { list: [], capped: false };
+
+  const ranked = available
+    .map((candidate) => ({
+      candidate,
+      key: pinCost(candidate.pin, request.type) + pinSidePenalty(candidate.pin, request.side, mcu),
+    }))
+    .sort((left, right) => left.key - right.key || left.candidate.pin.number - right.candidate.pin.number)
+    .map((item) => item.candidate);
+
+  const results = [];
+  const possible = ranked.length - channels + 1;
+  /* 单路 GPIO 的候选是完全等价的，必须把所有脚都留给后续外设冲突检查；
+     否则前 8 个脚刚好被别的接口占掉时，后面的可行脚会被错误截断。 */
+  const windows = channels === 1 ? possible : Math.min(ANALOG_BRANCH_LIMIT, possible);
+  for (let start = 0; start < windows; start += 1) {
+    const assignments = ranked.slice(start, start + channels).map((candidate, index) => ({
+      pin: candidate.pin,
+      signal: `GPIO${index + 1}`,
+      function: `GPIO${index + 1}`,
+      af: null,
+    }));
+    const score = assignments.reduce((sum, item) => sum + pinCost(item.pin, request.type), 0)
+      + groupSpread(assignments, mcu)
+      + sidePenalty(assignments, request.side, mcu);
+    results.push({
+      type: request.type,
+      instance: request.instance,
+      variant: request.variant,
+      requestId: request.id,
+      assignments,
+      baseScore: score,
+      score,
+    });
+  }
+  return {
+    list: results.sort((left, right) => left.score - right.score),
+    capped: windows < possible,
+  };
+}
+
 /* 组合是否被截断要**逐实例**记账，不能对整个类型取或。
    请求指定了 SPI2 或 ADC3 时，SPI1 / ADC1 的截断与这一路无关；混为一谈会
    把"已穷举确认无解"降级成"无法判定"——ADC3 只有 4 个 INP 脚，要 8 路本该
@@ -491,12 +602,15 @@ function collectInstances(entries) {
 /* 按 (类型, 变体, 耐压要求) 建候选。返回按实例分开的条目——方位偏好是
    per-request 的，要等到具体请求时才能定序，所以这里只算基础分。
    模拟类型返回的是通道池（analogPools），组合留到搜索时才现挑。 */
-function buildCandidates(mcu, type, variant, options, excluded, fiveVolt) {
-  const definition = DEFINITIONS[type];
+function buildCandidates(mcu, type, variant, options, excluded, fiveVolt, customSignals = null) {
+  const definition = definitionOf(type);
+  if (definition.family === "gpio") {
+    return { perInstance: [], gpioPool: buildGpioPool(mcu, options, excluded, fiveVolt) };
+  }
   if (definition.family === "analog") {
     return { perInstance: [], analogPools: buildAnalogPools(mcu, type, options, excluded, fiveVolt) };
   }
-  const required = definition.variants[variant]?.signals;
+  const required = requiredSignals(definition, { variant, signals: customSignals });
   if (!required) return { perInstance: [] };
   const instances = indexSignals(mcu, type, options, excluded, fiveVolt);
   const entries = [];
@@ -513,8 +627,40 @@ function buildCandidates(mcu, type, variant, options, excluded, fiveVolt) {
 
    注意：top-COMBO_LIMIT 的截断发生在基础分阶段，所以一个"基础分平庸
    但极其贴合方位偏好"的组合可能从未进入这里。80 的余量对 LQFP100 够用。 */
+function instanceAllowed(request, instance) {
+  if (request.instance && instance !== request.instance) return false;
+  return !request.instancePattern || new RegExp(`^(?:${request.instancePattern})$`).test(instance);
+}
+
+/* 每个实例在搜索时最多现挑几组。比 COMBO_LIMIT 小得多：这里已经避开了被占的脚，
+   剩下的组合之间只差一两个可互换的脚。挑满即视为"没穷举"，不能据此证明无解。 */
+const LAZY_LIMIT = 12;
+
+function lazyCandidatesAt(mcu, task, taken) {
+  const { request } = task;
+  const required = request.signals;
+  const list = [];
+  let capped = false;
+  for (const [instance, signals] of task.signalMaps) {
+    const free = new Map([...signals].map(([signal, candidates]) => [
+      signal, candidates.filter((candidate) => !taken(candidate.pin.number)),
+    ]));
+    const built = combinationsForInstance(mcu, request.type, instance, free, required, LAZY_LIMIT);
+    if (built.truncated) capped = true;
+    for (const combo of built.list) {
+      list.push({
+        ...combo,
+        variant: request.variant,
+        requestId: request.id,
+        score: combo.baseScore + sidePenalty(combo.assignments, request.side, mcu),
+      });
+    }
+  }
+  return { list: list.sort((left, right) => left.score - right.score), capped };
+}
+
 function candidatesForRequest(perInstance, request, mcu) {
-  const relevant = perInstance.filter((entry) => !request.instance || entry.instance === request.instance);
+  const relevant = perInstance.filter((entry) => instanceAllowed(request, entry.instance));
   const lists = relevant
     .map((entry) => entry.list
       .map((combo) => ({
@@ -614,18 +760,26 @@ let autoRequestId = 0;
    这样既有的调用方和测试不用改。 */
 function normalizeRequests(requirements, options) {
   if (Array.isArray(requirements)) {
+    let gpioOrdinal = 0;
     return requirements
-      .filter((request) => DEFINITIONS[request?.type])
+      .filter((request) => definitionOf(request?.type))
       .map((request, index) => {
-        const definition = DEFINITIONS[request.type];
-        const variant = definition.variants[request.variant] ? request.variant : definition.defaultVariant;
+        const definition = definitionOf(request.type);
+        const signals = Array.isArray(request.signals) && request.signals.length ? request.signals : null;
+        const variant = signals ? "custom"
+          : definition.variants[request.variant] ? request.variant : definition.defaultVariant;
+        const instance = request.instance
+          || (request.type === "GPIO" ? `GPIO${++gpioOrdinal}` : null);
         return {
           id: request.id ?? `req-${index}`,
           type: request.type,
           variant,
-          instance: request.instance || null,
+          instance,
           side: SIDES[request.side] ? request.side : null,
           fiveVolt: Boolean(request.fiveVolt),
+          ...(signals ? { signals } : {}),
+          /* 只在某一类实例里挑（USARTd+ 而不是任意 UART 类实例），正则源码 */
+          ...(request.instancePattern ? { instancePattern: request.instancePattern } : {}),
         };
       });
   }
@@ -635,6 +789,7 @@ function normalizeRequests(requirements, options) {
     UART: options.flowControl ? "flow" : "duplex",
   };
   const requests = [];
+  let gpioOrdinal = 0;
   for (const [type, count] of Object.entries(requirements || {})) {
     if (!DEFINITIONS[type]) continue;
     const fixed = (options.fixedInstances?.[type] || []).filter(Boolean);
@@ -643,7 +798,7 @@ function normalizeRequests(requirements, options) {
         id: `legacy-${type}-${index}`,
         type,
         variant: legacyVariant[type] || DEFINITIONS[type].defaultVariant,
-        instance: fixed[index] || null,
+        instance: fixed[index] || (type === "GPIO" ? `GPIO${++gpioOrdinal}` : null),
         side: null,
         fiveVolt: false,
       });
@@ -680,10 +835,10 @@ export function allocatePins(mcu, requirements, options = {}, lockedGroups = [])
   const cache = new Map();
   /* 缓存键必须带上耐压要求：同一次求解里可能既有一路 5V SPI 又有一路普通
      SPI，两者的候选池不同，共用一个 key 会让后来的那路拿到错误的候选。 */
-  function candidatePoolFor(type, variant, fiveVolt) {
-    const key = `${type}|${variant}|${fiveVolt ? "5v" : "any"}`;
+  function candidatePoolFor(type, variant, fiveVolt, signals = null) {
+    const key = `${type}|${variant}|${fiveVolt ? "5v" : "any"}|${signals ? JSON.stringify(signals) : ""}`;
     if (!cache.has(key)) {
-      cache.set(key, buildCandidates(mcu, type, variant, normalizedOptions, excluded, fiveVolt));
+      cache.set(key, buildCandidates(mcu, type, variant, normalizedOptions, excluded, fiveVolt, signals));
     }
     return cache.get(key);
   }
@@ -714,20 +869,41 @@ export function allocatePins(mcu, requirements, options = {}, lockedGroups = [])
   /* 候选少的请求先排——固定了实例、或信号多到几乎没得选的（ETH、SDMMC）
      放在最前面能最早剪枝。 */
   const tasks = requests
-    .filter((request) => !claimed.has(request.id))
-    .map((request) => {
-      const pool = candidatePoolFor(request.type, request.variant, request.fiveVolt);
-      if (pool.analogPools) {
+     .filter((request) => !claimed.has(request.id))
+     .map((request) => {
+       const pool = candidatePoolFor(request.type, request.variant, request.fiveVolt, request.signals);
+       if (pool.gpioPool) {
+         const channels = definitionOf(request.type).variants[request.variant]?.channels || 1;
+         return {
+           request,
+           gpioPool: pool.gpioPool,
+           candidates: [],
+           analog: true,
+           gpio: true,
+           order: Math.max(0, pool.gpioPool.length - channels),
+           truncated: false,
+         };
+       }
+       if (pool.analogPools) {
         /* 模拟组的候选要等搜索时才知道（取决于哪些脚还空着），这里只筛实例。
            排序键取"余量"= 最大通道池 − 所需通道数：余量小的先排。
            DAC1 只有 PA4/PA5 两个脚（余量 0），而这两个脚同时是 ADC12_INP18/INP19；
            让余量大的 ADC 先挑就会把 DAC 饿死。 */
         const entries = pool.analogPools.filter((entry) => !request.instance || entry.instance === request.instance);
-        const channels = DEFINITIONS[request.type].variants[request.variant]?.channels || 1;
+        const channels = definitionOf(request.type).variants[request.variant]?.channels || 1;
         const slack = Math.max(0, Math.max(...entries.map((entry) => entry.pool.length), 0) - channels);
         return { request, analogEntries: entries, candidates: [], analog: true, order: slack, truncated: false };
       }
       const built = candidatesForRequest(pool.perInstance, request, mcu);
+      if (request.signals) {
+        /* 自定义信号表的宽总线（FMC SDRAM 38 根、LTDC RGB565 20 根）组合数是
+           2^k 级，预先只取最便宜的 COMBO_LIMIT 个，它们很可能全都撞上别的接口
+           ——F429 的 LTDC_G5 只在 PB11，而 PB11 也是 ETH_TX_EN。所以改成搜索时
+           按"此刻还空着的脚"现挑（同模拟组的思路），排序键仍用预建的候选数。 */
+        const signalMaps = [...indexSignals(mcu, request.type, normalizedOptions, excluded, request.fiveVolt)]
+          .filter(([instance]) => instanceAllowed(request, instance));
+        return { request, lazy: true, signalMaps, candidates: [], analog: false, order: built.ordered.length, truncated: false };
+      }
       return { request, candidates: built.ordered, analog: false, order: built.ordered.length, truncated: built.truncated };
     })
     /* 数字外设先排（候选少的最先，最早剪枝），模拟组统一排在后面——它们最灵活，
@@ -769,8 +945,20 @@ export function allocatePins(mcu, requirements, options = {}, lockedGroups = [])
 
     const task = tasks[taskIndex];
     /* 模拟组的候选取决于此刻还剩哪些脚，所以现算；数字外设的候选是预先建好的。 */
-    let candidates = task.candidates;
-    if (task.analog) {
+     let candidates = task.candidates;
+     if (task.lazy) {
+       const taken = (number) => usedPins.has(number) || lockedPins.has(number);
+       const built = lazyCandidatesAt(mcu, task, taken);
+       if (built.capped) analogCapped = true;
+       candidates = built.list;
+     }
+     if (task.gpio) {
+       const taken = (number) => usedPins.has(number) || lockedPins.has(number);
+       const built = gpioCandidatesAt(mcu, task.request, task.gpioPool, taken);
+       if (built.capped) analogCapped = true;
+       candidates = built.list;
+     }
+     if (task.analog && !task.gpio) {
       const taken = (number) => usedPins.has(number) || lockedPins.has(number);
       candidates = [];
       for (const entry of task.analogEntries) {
@@ -784,15 +972,15 @@ export function allocatePins(mcu, requirements, options = {}, lockedGroups = [])
     }
 
     for (const candidate of candidates) {
-      const instanceKey = `${candidate.type}:${candidate.instance}`;
-      if (usedInstances.has(instanceKey) || lockedInstances.has(instanceKey)) continue;
-      if (candidate.assignments.some((item) => usedPins.has(item.pin.number) || lockedPins.has(item.pin.number))) continue;
-      candidate.assignments.forEach((item) => usedPins.add(item.pin.number));
-      usedInstances.add(instanceKey);
-      groups.push({ ...candidate, locked: false });
-      visit(taskIndex + 1, groups, usedPins, usedInstances, score + candidate.score);
-      groups.pop();
-      usedInstances.delete(instanceKey);
+       const instanceKey = `${candidate.type}:${candidate.instance}`;
+       if (!task.gpio && (usedInstances.has(instanceKey) || lockedInstances.has(instanceKey))) continue;
+       if (candidate.assignments.some((item) => usedPins.has(item.pin.number) || lockedPins.has(item.pin.number))) continue;
+       candidate.assignments.forEach((item) => usedPins.add(item.pin.number));
+       if (!task.gpio) usedInstances.add(instanceKey);
+       groups.push({ ...candidate, locked: false });
+       visit(taskIndex + 1, groups, usedPins, usedInstances, score + candidate.score);
+       groups.pop();
+       if (!task.gpio) usedInstances.delete(instanceKey);
       candidate.assignments.forEach((item) => usedPins.delete(item.pin.number));
     }
   }
@@ -815,10 +1003,12 @@ export function allocatePins(mcu, requirements, options = {}, lockedGroups = [])
     droppedLocks,
     /* 模拟组没有预建候选表，报可用通道数——那才是"这一路还有多少余地"。 */
     candidates: Object.fromEntries(tasks.map((task) => [
-      task.request.id,
-      task.analogEntries
-        ? task.analogEntries.reduce((sum, entry) => sum + entry.pool.length, 0)
-        : task.candidates.length,
+       task.request.id,
+       task.gpioPool
+         ? task.gpioPool.length
+         : task.analogEntries
+         ? task.analogEntries.reduce((sum, entry) => sum + entry.pool.length, 0)
+         : task.candidates.length,
     ])),
   };
 }
@@ -833,6 +1023,7 @@ const PROTOCOL_PATTERNS = [
   [/^OTG_/, "usb"],
   [/^ETH_/, "eth"],
   [/^(TIM|TIMA|TIMG|HRTIM|LPTIM)/, "timer"],
+  [/^GPIO\d*$/, "gpio"],
   /* ST 的 ADC123_INP10 / DAC1_OUT1，TI 的 A0_8 / DAC_OUT */
   [/^(ADC\d*|DAC\d*|A\d+)_/, "analog"],
 ];

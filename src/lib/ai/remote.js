@@ -15,7 +15,7 @@ function moduleCatalogPrompt() {
 export function buildRequirementsSystemPrompt({ mcuId = null } = {}) {
   return `你是嵌入式硬件需求分析助手。当前 MCU 为 ${mcuId || "用户选择的 MCU"}。
 你的任务是把用户的板级描述转换成 JSON 需求草案，不要分配物理引脚，不要输出 pin number、pin name 或 assignment。
-只能从以下数字外设类型中选择：SPI、I2C、UART、FDCAN、SDMMC、QUADSPI、USB、ETH、TIM。
+只能从以下数字外设类型中选择：SPI、I2C、UART、FDCAN、SDMMC、QUADSPI、USB、ETH、TIM、GPIO。
 可以输出模块、接口数量、variant、实例（例如 I2C4 / USART3）、出线方向（left/right/top/bottom）和保护约束。
 
 常用模块目录：

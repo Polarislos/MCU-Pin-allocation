@@ -18,7 +18,7 @@ import { AI_ASSISTANT_TOOLS, createRequirementsEnvelope, validateRequirementsEnv
 import { analysisFromEnvelope, analyzeRequirementsText } from "../src/lib/ai/assistant.js";
 import { buildRequirementsSystemPrompt } from "../src/lib/ai/remote.js";
 import { MCU_CATALOG, ensureMcuLoaded, getMcuById } from "../src/lib/mcuCatalog.js";
-import { buildPeripheralCatalog, peripheralFunctions } from "../src/lib/peripherals.js";
+import { buildPeripheralCatalog, peripheralFunctions, requestTypesFor } from "../src/lib/peripherals.js";
 import { checkMcuInvariants } from "./lib/invariants.mjs";
 import { checkFixture, loadFixtures } from "./lib/fixtures.mjs";
 
@@ -43,6 +43,7 @@ console.log(`Verified ${MCU_CATALOG.length} devices against shared invariants an
 
 const mcu = getMcuById("st-stm32h743vit6-lqfp100").data;
 const mspm0 = getMcuById("ti-mspm0g3519-lqfp64-pm").data;
+assert.ok(requestTypesFor(mspm0, "ti-mspm0").includes("GPIO"), "MSPM0 的接口需求类型应包含普通 GPIO");
 
 const tiPeripheralCatalog = buildPeripheralCatalog(mspm0, "ti-mspm0");
 assert.deepEqual(
@@ -130,6 +131,27 @@ assert.ok(fixedSpi.solutions.every((solution) => solution.groups[0].instance ===
 assert.deepEqual(
   extendedSignals.solutions[0].groups.find((group) => group.type === "UART").assignments.map((item) => item.signal),
   ["TX", "RX", "CTS", "RTS"],
+);
+
+/* 普通 GPIO 没有 AF 表，仍应能作为数量型需求分配，并严格跳过已使用脚。 */
+const preusedGpio = mcu.pins
+  .filter((pin) => pin.kind === "gpio" && pin.protection.length === 0)
+  .slice(0, 4)
+  .map((pin) => pin.number);
+const gpioPlan = allocatePins(
+  mcu,
+  [{ id: "gpio", type: "GPIO", variant: "io4" }],
+  { maxSolutions: 1, excludedPins: preusedGpio },
+);
+assert.equal(gpioPlan.solutions.length, 1, "普通 GPIO 需求应能生成方案");
+assert.equal(gpioPlan.solutions[0].groups[0].instance, "GPIO1");
+assert.deepEqual(
+  gpioPlan.solutions[0].groups[0].assignments.map((item) => item.signal),
+  ["GPIO1", "GPIO2", "GPIO3", "GPIO4"],
+);
+assert.ok(
+  gpioPlan.solutions[0].groups[0].assignments.every((item) => !preusedGpio.includes(item.pin.number)),
+  "已使用锁定的 GPIO 不得再次进入生成结果",
 );
 
 // (a) 无解要能区分"已穷举确认"和"预算耗尽无法判定"

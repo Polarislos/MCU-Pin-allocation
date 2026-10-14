@@ -1,9 +1,14 @@
+import McuCompareBar from "./components/McuCompareBar.jsx";
+import PageNavigation from "./components/PageNavigation.jsx";
+import PeripheralGuidePanel from "./components/PeripheralGuidePanel.jsx";
+import PeripheralDirectoryPage from "./components/PeripheralDirectoryPage.jsx";
+import { PERIPHERAL_GUIDES, guideForPeripheral } from "./data/peripheralGuides/index.js";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   DEFINITIONS, PERIPHERAL_TYPE_ORDER, SIDES, createRequest, instancesForType, isFiveVoltTolerant,
   protocolForFunction, supportsFiveVolt,
 } from "./lib/allocator.js";
-import { EXPORT_FORMATS, downloadSolution } from "./lib/export.js";
+import { EXPORT_FORMATS, downloadPinDefinitions, downloadSolution } from "./lib/export.js";
 import { decodeFanoutFile, encodeFanoutFile, fanoutFileName, fillFanout } from "./lib/fanout.js";
 import {
   TIMER_MODE_LABELS, buildPeripheralCatalog, isPeripheralPin, peripheralFunctions, requestTypesFor,
@@ -21,6 +26,12 @@ import Tour from "./components/Tour.jsx";
 import PersonalCenter from "./components/PersonalCenter.jsx";
 import { loadProject, parseProject, projectFileName, projectToJson, serializeProject } from "./lib/project.js";
 import { diffPlans, diffRequests, isEmptyDiff } from "./lib/diff.js";
+import {
+  conditionKey, conditionLabel, describeHit, hasPeripheralData, hasPlaceholder, parseConditions,
+  deviceFamilies, indexSchema, packageShapes, peripheralVocabulary, profileOf, searchDevices, similarConditions, suggestConditions,
+} from "./lib/deviceSearch.js";
+import { defaultParams, usageById } from "./lib/peripheralUsage.js";
+import { CAPABILITIES, CAPABILITY_CATEGORIES, capabilityCoverage } from "./lib/capabilities.js";
 
 const AI_CONFIG_STORAGE_KEY = "mcu-pin-planner.ai-config.v1";
 const PROJECT_STORAGE_KEY = "mcu-pin-planner.project.v1";
@@ -71,6 +82,149 @@ function createDefaultRequests(requestTypes) {
   return types.map((type) => createRequest(type));
 }
 
+function readMcuSearchState() {
+  const defaults = {
+    query: "", conditions: [], mode: "all", page: 0,
+    view: "match", filters: {
+      vendor: "", family: "", shape: "", pinMin: "", pinMax: "",
+      flashMinKB: "", ramMinKB: "", frequencyMinMHz: "",
+    },
+  };
+  if (typeof window === "undefined" || !window.location.hash.startsWith("#/mcus")) return defaults;
+  try {
+    const params = new URLSearchParams(window.location.hash.split("?")[1] || "");
+    const decoded = JSON.parse(params.get("conditions") || "[]");
+    const conditions = Array.isArray(decoded) ? decoded.filter((condition) => (
+      condition && ["type", "instance", "group", "usage", "capability"].includes(condition.kind)
+      && typeof condition.value === "string"
+      && (condition.kind !== "usage" || usageById(condition.value))
+    )).map((condition) => {
+      const normalized = { ...condition, min: Math.max(1, Math.floor(Number(condition.min) || 1)) };
+      if (condition.kind === "usage") {
+        const usage = usageById(condition.value);
+        const params = defaultParams(usage);
+        for (const param of usage.params || []) {
+          const picked = condition.params?.[param.key];
+          const match = param.values.find((value) => String(value) === String(picked));
+          if (match !== undefined) params[param.key] = match;
+        }
+        normalized.params = params;
+      }
+      return normalized;
+    }) : [];
+    const view = ["match", "incomplete", "unknown"].includes(params.get("view")) ? params.get("view") : "match";
+    return {
+      query: params.get("q") || "",
+      conditions,
+      mode: params.get("mode") === "any" ? "any" : "all",
+      page: Math.max(0, Number.parseInt(params.get("page"), 10) || 0),
+      view,
+      filters: {
+        vendor: ["st", "ti"].includes(params.get("vendor")) ? params.get("vendor") : "",
+        family: params.get("family") || "",
+        shape: params.get("shape") || "",
+        pinMin: params.get("pinMin") || "",
+        pinMax: params.get("pinMax") || "",
+        flashMinKB: params.get("flashMinKB") || "",
+        ramMinKB: params.get("ramMinKB") || "",
+        frequencyMinMHz: params.get("frequencyMinMHz") || "",
+      },
+    };
+  } catch {
+    return defaults;
+  }
+}
+
+const MCU_PERIPHERAL_CATEGORIES = [
+  { label: "通信与接口", types: new Set(["I2C", "I3C", "SPI", "I2S", "SAI", "USART", "UART", "LPUART", "CAN", "FDCAN", "USB", "USB_OTG_FS", "USB_OTG_HS", "USB_DRD_FS", "USBH_HS", "ETH", "MDIOS", "DCMI", "DCMIPP", "LTDC", "DSIHOST", "HDMI_CEC", "PSSI", "SPDIFRX", "SWPMI"]) },
+  { label: "存储接口", types: new Set(["FMC", "FSMC", "SDMMC", "SDIO", "QUADSPI", "OCTOSPI", "XSPI", "HSPI", "OSPI", "HYPERBUS", "EMIF", "GPMC", "EPI", "XINTF", "MMC", "MMCSD", "SD"]) },
+  { label: "模拟外设", types: new Set(["ADC", "DAC", "COMP", "OPAMP", "SDADC", "VREFBUF", "OA", "GPAMP", "CMPSS"]) },
+  { label: "定时与控制", types: new Set(["TIM", "LPTIM", "HRTIM", "GPTIMER", "GPTM", "TIMER", "WTIMER", "DMTIMER", "GPT", "BTIMER", "LGPT", "EPWM", "EHRPWM", "MCPWM", "ECAP", "EQEP", "QEI"]) },
+  { label: "计算、数据搬运与安全", types: new Set(["DMA", "BDMA", "MDMA", "DMA2D", "AES", "SAES", "CRYP", "HASH", "PKA", "RNG", "TRNG", "CRC", "CORDIC", "FMAC", "JPEG", "GPU2D", "NPU", "MATHACL"]) },
+  { label: "系统与其他", types: new Set(["RTC", "IWDG", "WWDG", "RAMECC", "TSC", "RF", "SUBGHZ"]) },
+];
+
+function summarizePeripheralInstances(instances) {
+  const byType = new Map();
+  for (const instance of instances || []) {
+    if (!byType.has(instance.type)) byType.set(instance.type, []);
+    byType.get(instance.type).push(instance);
+  }
+  const rows = [...byType].map(([type, entries]) => ({ type, entries, count: entries.length }));
+  const groups = MCU_PERIPHERAL_CATEGORIES.map((category) => ({
+    label: category.label,
+    rows: rows.filter((row) => category.types.has(row.type)),
+  })).filter((group) => group.rows.length);
+  const uncategorized = rows.filter((row) => !MCU_PERIPHERAL_CATEGORIES.some((category) => category.types.has(row.type)));
+  if (uncategorized.length) groups.push({ label: "其他外设", rows: uncategorized });
+  return { groups, typeCount: rows.length, instanceCount: instances?.length || 0 };
+}
+
+function formatMemoryKB(value) {
+  if (!Number.isFinite(value)) return "未收录";
+  const formatted = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 }).format(value);
+  if (value >= 1024) {
+    const mb = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 }).format(value / 1024);
+    return `${mb} MB（${formatted} KB）`;
+  }
+  return `${formatted} KB`;
+}
+
+function formatRamSpecs(specs = {}) {
+  const ram = Number.isFinite(specs.ramKB) ? formatMemoryKB(specs.ramKB) : "未收录";
+  if (Number.isFinite(specs.ccmRamKB) && specs.ccmRamKB > 0) {
+    return `${ram} + CCM ${formatMemoryKB(specs.ccmRamKB)}`;
+  }
+  return ram;
+}
+
+function formatVoltageRange(specs = {}) {
+  const min = specs.voltageMinV;
+  const max = specs.voltageMaxV;
+  const number = (value) => new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 }).format(value);
+  if (Number.isFinite(min) && Number.isFinite(max)) return `${number(min)}–${number(max)} V`;
+  if (Number.isFinite(min)) return `≥ ${number(min)} V（上限未收录）`;
+  if (Number.isFinite(max)) return `≤ ${number(max)} V（下限未收录）`;
+  return "未收录";
+}
+
+function vendorLabel(vendor) {
+  return vendor === "st" ? "STMicroelectronics" : vendor === "ti" ? "Texas Instruments" : String(vendor || "未知厂商").toUpperCase();
+}
+
+/* 搜索结果按芯片家族和厂商子系列组织；封装记录仍保留为独立选择项。 */
+function groupSearchItems(items = []) {
+  const families = new Map();
+  for (const item of items) {
+    const { device } = item;
+    const family = device.family || device.series || "其他系列";
+    const familyKey = `${device.vendor}:${family}`;
+    if (!families.has(familyKey)) {
+      families.set(familyKey, { key: familyKey, vendor: device.vendor, family, series: new Map() });
+    }
+    const group = families.get(familyKey);
+    const series = (device.vendor === "st" ? device.part?.match(/^STM32[A-Z][0-9][A-Z0-9]{2}/i)?.[0]?.toUpperCase() : null) || device.series || "未分类子系列";
+    if (!group.series.has(series)) group.series.set(series, []);
+    group.series.get(series).push(item);
+  }
+  return [...families.values()]
+    .sort((left, right) => left.family.localeCompare(right.family, undefined, { numeric: true }))
+    .map((group) => ({
+      ...group,
+      series: [...group.series.entries()]
+        .sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true }))
+        .map(([name, entries]) => ({ name, entries })),
+    }))
+    .map((group) => {
+      const entries = group.series.flatMap((series) => series.entries);
+      return {
+        ...group,
+        entryCount: entries.length,
+        modelCount: new Set(entries.map(({ device }) => device.part)).size,
+      };
+    });
+}
+
 function readAiConfig() {
   const defaults = { enabled: false, endpoint: "", model: "", apiKey: "" };
   if (typeof window === "undefined") return defaults;
@@ -97,6 +251,22 @@ export function inputSignature(requests, options, excludedPins, lockedGroups) {
   });
 }
 
+function solutionGroupKey(group) {
+  return `${group.type}:${group.instance}`;
+}
+
+/* 一键锁定当前方案的全部分配。锁的是 lockedGroups 而不是 excludedPins：
+   前者会让求解器继续使用这些脚并保持原分配，后者会把它们排除，反而导致
+   下一次生成时整套方案换脚。 */
+export function updateSolutionLocks(lockedGroups = [], solution = null, shouldLock = true) {
+  const groups = solution?.groups || [];
+  const keys = new Set(groups.map(solutionGroupKey));
+  const remaining = lockedGroups.filter((group) => !keys.has(solutionGroupKey(group)));
+  return shouldLock
+    ? [...remaining, ...groups.map((group) => ({ ...group, locked: true }))]
+    : remaining;
+}
+
 /* 工程文件里的 MCU 可能还没加载过引脚表——先取回来再还原，
    否则 hydrateProject 会把工程里每个引脚都判成"不存在"。 */
 async function loadProjectFile(file) {
@@ -116,6 +286,7 @@ async function loadProjectFile(file) {
    实际板子上 UART1 接蓝牙要流控、UART2 是调试口不要，二者必须能共存。 */
 function RequestRow({ mcu, request, index, onChange, onRemove, typeOrder = PERIPHERAL_TYPE_ORDER }) {
   const definition = DEFINITIONS[request.type];
+  const isGpio = request.type === "GPIO";
   const instances = useMemo(() => instancesForType(mcu, request.type), [mcu, request.type]);
   const variants = Object.entries(definition.variants);
   /* 两边封装（SOIC/TSSOP）没有顶边和底边可言，就不该给出这两个选项——
@@ -147,18 +318,25 @@ function RequestRow({ mcu, request, index, onChange, onRemove, typeOrder = PERIP
       </div>
       <div className="request-body">
         <label>
-          <span>接线</span>
+          <span>{isGpio ? "数量" : "接线"}</span>
           <select value={request.variant} onChange={(event) => update({ variant: event.target.value })}>
             {variants.map(([id, variant]) => <option key={id} value={id}>{variant.label}</option>)}
           </select>
         </label>
-        <label>
-          <span>实例</span>
-          <select value={request.instance || ""} onChange={(event) => update({ instance: event.target.value || null })}>
-            <option value="">自动选择</option>
-            {instances.map((instance) => <option key={instance} value={instance}>{instance}</option>)}
-          </select>
-        </label>
+        {isGpio ? (
+          <div className="request-field-note">
+            <span>引脚范围</span>
+            <small>自动选择未锁定的普通 GPIO</small>
+          </div>
+        ) : (
+          <label>
+            <span>实例</span>
+            <select value={request.instance || ""} onChange={(event) => update({ instance: event.target.value || null })}>
+              <option value="">自动选择</option>
+              {instances.map((instance) => <option key={instance} value={instance}>{instance}</option>)}
+            </select>
+          </label>
+        )}
         <label>
           <span>靠近</span>
           <select value={request.side || ""} onChange={(event) => update({ side: event.target.value || null })}>
@@ -204,7 +382,10 @@ function Toggle({ checked, onChange, children }) {
   - 下拉：固化进 src/data/mcus/ 的器件，离线可用、被 npm test 覆盖；
   - 搜索：src/data/deviceIndex.json 里的全部型号，选中时由本地服务器现场转换。
 
-  索引有 550 KB，首屏用不到，所以点开搜索框才去动态 import——不能让一个多数
+  搜索还能叠加外设条件和 Flash/RAM/主频门槛，逻辑在
+  src/lib/deviceSearch.js，只判断"厂商数据库里有这个外设"。
+
+  索引含外设摘要和器件规格后约 1.5 MB（当前 gzip 约 98 KB），首屏用不到，所以点开搜索框才去动态 import——不能让一个多数
   人不会用的功能拖慢启动。
 */
 /*
@@ -237,39 +418,329 @@ function ThemeSwitch({ mode, resolved, onChange }) {
   );
 }
 
-function McuSelector({ catalog, selectedId, onChange, onPick, loading, notice }) {
+function McuSelector({ catalog, selectedId, onChange, onPick, loading, notice, projectRequests = [], onGuide, guideSearch, pageOpen, onOpenPage, onClosePage, onNavigate }) {
+  const [initialSearch] = useState(readMcuSearchState);
   const [browsing, setBrowsing] = useState(false);
   const [index, setIndex] = useState(null);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialSearch.query);
   const [indexError, setIndexError] = useState("");
+  const [conditions, setConditions] = useState(initialSearch.conditions);
+  const [peripheralText, setPeripheralText] = useState("");
+  const [peripheralError, setPeripheralError] = useState("");
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [mode, setMode] = useState(initialSearch.mode);
+  const [page, setPage] = useState(initialSearch.page);
+  const [expandedFamily, setExpandedFamily] = useState("");
+  const [expandedSeries, setExpandedSeries] = useState("");
+  /* 只看"外设在、但封装信号不全"的型号：解释为什么某颗有 FMC 却不在 SDRAM 结果里 */
+  const [incomplete, setIncomplete] = useState(initialSearch.view === "incomplete");
+  /* "数据未知"视图：有条件对这些型号下不了结论（未映射、记录不足），单独列出而不是混进"不满足" */
+  const [showUnknown, setShowUnknown] = useState(initialSearch.view === "unknown");
+  const [filters, setFilters] = useState(initialSearch.filters);
+  const [selectedDeviceId, setSelectedDeviceId] = useState("");
+  const [compareIds, setCompareIds] = useState([]);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [compareOnlyDifferences, setCompareOnlyDifferences] = useState(false);
+  const [similar, setSimilar] = useState([]);
+  /* 第 3 层：逐颗交给求解器。结果按 (器件, 条件签名) 缓存，条件一变旧结论自动作废 */
+  const [feasibility, setFeasibility] = useState(() => new Map());
+  const [includeProject, setIncludeProject] = useState(false);
+  const [protectDebug, setProtectDebug] = useState(true);
+  const [batchRunning, setBatchRunning] = useState(false);
+  const feasibilityWorker = useRef(null);
+  const feasibilityCalls = useRef(new Map());
 
   useEffect(() => {
     if (!browsing || index) return;
     let cancelled = false;
     import("./data/deviceIndex.json")
-      .then((module) => { if (!cancelled) setIndex(module.default.devices); })
+      .then((module) => { if (!cancelled) setIndex(module.default); })
       .catch(() => {
         if (!cancelled) setIndexError("器件索引还没生成，先跑一次 npm run mcu:catalog");
       });
     return () => { cancelled = true; };
   }, [browsing, index]);
 
-  /* 3000+ 条全渲染会卡，而且一次看几百个型号也没意义——只给前 60 条，
-     让人把搜索词打得更具体。 */
-  const matches = useMemo(() => {
-    if (!index) return [];
-    const words = query.trim().toUpperCase().split(/\s+/).filter(Boolean);
-    if (words.length === 0) return [];
-    const hits = [];
-    for (const item of index) {
-      const haystack = `${item.part} ${item.series} ${item.package} ${item.pinCount}`.toUpperCase();
-      if (words.every((word) => haystack.includes(word))) {
-        hits.push(item);
-        if (hits.length >= 60) break;
-      }
+  useEffect(() => { setBrowsing(pageOpen); }, [pageOpen]);
+
+  const vocabulary = useMemo(() => (index ? peripheralVocabulary(index) : null), [index]);
+  /* 能力目录的覆盖数只在打开目录时算一次（三千多颗 × 四十多项，几十毫秒） */
+  const coverage = useMemo(() => (index && catalogOpen ? capabilityCoverage(index, profileOf) : null), [index, catalogOpen]);
+  const suggestions = useMemo(
+    () => (vocabulary ? suggestConditions(peripheralText, vocabulary) : []),
+    [vocabulary, peripheralText],
+  );
+
+  /* 条件一变就回到第一页，不然会停在一个已经不存在的页码上 */
+  const view = showUnknown ? "unknown" : incomplete ? "incomplete" : "match";
+  useEffect(() => { setPage(0); setExpandedFamily(""); setExpandedSeries(""); }, [query, conditions, mode, view, filters]);
+  useEffect(() => {
+    if (!conditions.length) setShowUnknown(false);
+  }, [conditions]);
+  const schema = useMemo(() => (index ? indexSchema(index) : null), [index]);
+  const shapes = useMemo(() => (index ? packageShapes(index) : []), [index]);
+  useEffect(() => {
+    if (!conditions.some((condition) => condition.kind === "usage")) setIncomplete(false);
+  }, [conditions]);
+
+  /* 全量过滤、按页渲染：总数要准，但一次只画一页，3000+ 条全渲染会卡 */
+  const allResults = useMemo(
+    () => (index ? searchDevices(index, { text: query, filters, conditions, mode, page: 0, pageSize: Math.max(1, index.devices.length), view }) : null),
+    [index, query, filters, conditions, mode, view],
+  );
+  const resultGroups = useMemo(() => groupSearchItems(allResults?.items), [allResults]);
+  const activeFamily = resultGroups.find((family) => family.key === expandedFamily);
+  const familyItems = activeFamily?.series.find((series) => series.name === expandedSeries)?.entries || [];
+  const familyPageCount = Math.ceil(familyItems.length / 30);
+  const familyPage = Math.min(page, Math.max(0, familyPageCount - 1));
+  const visibleItems = familyItems.slice(familyPage * 30, (familyPage + 1) * 30);
+  const result = allResults ? { ...allResults, items: visibleItems, page: familyPage, pageCount: familyPageCount } : null;
+  const selectedResult = result?.items.find((item) => item.device.id === selectedDeviceId) || result?.items[0] || null;
+  const selectedProfile = useMemo(
+    () => (index && selectedResult ? profileOf(index, selectedResult.device) : null),
+    [index, selectedResult],
+  );
+  const peripheralSummary = useMemo(
+    () => (selectedProfile ? summarizePeripheralInstances(selectedProfile) : null),
+    [selectedProfile],
+  );
+
+  useEffect(() => {
+    setSelectedDeviceId(result?.items[0]?.device.id || "");
+  }, [query, conditions, mode, view, filters, page]);
+
+  useEffect(() => {
+    if (!pageOpen || typeof window === "undefined") return;
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("q", query.trim());
+    if (filters.vendor) params.set("vendor", filters.vendor);
+    if (filters.family) params.set("family", filters.family);
+    if (filters.shape) params.set("shape", filters.shape);
+    if (filters.pinMin) params.set("pinMin", filters.pinMin);
+    if (filters.pinMax) params.set("pinMax", filters.pinMax);
+    if (filters.flashMinKB) params.set("flashMinKB", filters.flashMinKB);
+    if (filters.ramMinKB) params.set("ramMinKB", filters.ramMinKB);
+    if (filters.frequencyMinMHz) params.set("frequencyMinMHz", filters.frequencyMinMHz);
+    if (conditions.length) params.set("conditions", JSON.stringify(conditions));
+    if (mode !== "all") params.set("mode", mode);
+    if (view !== "match") params.set("view", view);
+    if (page) params.set("page", String(page));
+    const suffix = params.size ? `?${params.toString()}` : "";
+    const nextHash = `#/mcus${suffix}`;
+    if (window.location.hash !== nextHash) {
+      window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}${nextHash}`);
     }
-    return hits;
-  }, [index, query]);
+  }, [pageOpen, query, filters, conditions, mode, view, page]);
+
+  function addConditions(list) {
+    setConditions((current) => {
+      const next = [...current];
+      for (const condition of list) {
+        const at = next.findIndex((item) => conditionKey(item) === conditionKey(condition));
+        if (at === -1) next.push(condition);
+        else next[at] = condition;
+      }
+      return next;
+    });
+  }
+
+  /* 回车整段解析（"SDMMC FMC"、"SDMMC ≥ 2"）；整段都认不出时取第一个候选。
+     认不出的词留在框里并提示，而不是悄悄丢掉。 */
+  function commitPeripheralText() {
+    if (!vocabulary || !peripheralText.trim()) return;
+    const { parsed, unknown } = parseConditions(peripheralText, vocabulary);
+    if (parsed.length === 0 && suggestions.length > 0) {
+      addConditions([suggestions[0].condition]);
+      setPeripheralText("");
+      setPeripheralError("");
+      return;
+    }
+    addConditions(parsed);
+    setPeripheralText(unknown.join(" "));
+    setPeripheralError(unknown.length ? `索引里没有这些外设：${unknown.join("、")}` : "");
+    setSimilar(unknown.flatMap((word) => similarConditions(word, vocabulary)));
+  }
+
+  function pickSuggestion(condition) {
+    addConditions([condition]);
+    setPeripheralText("");
+    setPeripheralError("");
+    setSimilar([]);
+  }
+
+  function setMin(condition, min) {
+    setConditions((current) => current.map((item) => (
+      conditionKey(item) === conditionKey(condition) ? { ...item, min: Math.max(1, min) } : item
+    )));
+  }
+
+  useEffect(() => {
+    if (!guideSearch) return;
+    setBrowsing(true);
+    pickSuggestion(guideSearch.condition || { kind: "capability", value: guideSearch.id, min: 1 });
+  }, [guideSearch]);
+
+  function setParam(condition, key, value) {
+    setConditions((current) => current.map((item) => (
+      conditionKey(item) === conditionKey(condition) ? { ...item, params: { ...item.params, [key]: value } } : item
+    )));
+  }
+
+  function removeCondition(condition) {
+    setConditions((current) => current.filter((item) => conditionKey(item) !== conditionKey(condition)));
+  }
+
+  const families = useMemo(() => (index ? deviceFamilies(index, filters.vendor) : []), [index, filters.vendor]);
+  const specificationCoverage = index?.specifications?.coverage || {};
+  const selectedSpecs = selectedResult?.device?.specs || {};
+  const comparisonEntries = useMemo(() => {
+    if (!index) return [];
+    const devices = new Map(index.devices.map((device) => [device.id, device]));
+    return compareIds.map((id) => devices.get(id)).filter(Boolean).map((device) => {
+      const profile = profileOf(index, device);
+      const counts = profile ? new Map() : null;
+      for (const instance of profile || []) counts.set(instance.type, (counts.get(instance.type) || 0) + 1);
+      return {
+        device,
+        profile,
+        counts,
+        typeCount: counts?.size ?? null,
+        instanceCount: profile?.length ?? null,
+      };
+    });
+  }, [index, compareIds]);
+  const comparisonSpecRows = useMemo(() => {
+    const definitions = [
+      { label: "厂商", value: ({ device }) => vendorLabel(device.vendor) },
+      { label: "数据版本", value: ({ device }) => {
+        if (device.sourceTool) return `${device.sourceTool} DFP ${device.sourceRelease || "未收录"}`;
+        const source = index?.sources?.find((item) => item.vendor === device.vendor);
+        return source ? [source.tool, source.release].filter(Boolean).join(" ") || "未收录" : "未收录";
+      } },
+      { label: "家族", value: ({ device }) => device.family || "未收录" },
+      { label: "子系列", value: ({ device }) => device.series || "未收录" },
+      { label: "封装", value: ({ device }) => device.package || "未收录" },
+      { label: "引脚数", value: ({ device }) => device.pinCount ? `${device.pinCount} 脚` : "未收录" },
+      { label: "内核", value: ({ device }) => device.core || "未收录" },
+      { label: "Flash", value: ({ device }) => formatMemoryKB(device.specs?.flashKB) },
+      { label: "RAM", value: ({ device }) => formatRamSpecs(device.specs || {}) },
+      { label: "最高频率", value: ({ device }) => Number.isFinite(device.specs?.frequencyMHz) ? `${device.specs.frequencyMHz} MHz` : "未收录" },
+      { label: "供电电压范围", value: ({ device }) => formatVoltageRange(device.specs || {}) },
+      { label: "外设种类", value: (entry) => entry.typeCount == null ? "未收录" : `${entry.typeCount} 类` },
+      { label: "外设实例", value: (entry) => entry.instanceCount == null ? "未收录" : `${entry.instanceCount} 个` },
+    ];
+    return definitions.map((definition) => {
+      const values = comparisonEntries.map(definition.value);
+      const known = values.every((value) => !String(value).includes("未收录"));
+      return { ...definition, values, different: known && new Set(values).size > 1, uncertain: !known };
+    });
+  }, [comparisonEntries]);
+  const comparisonPeripheralGroups = useMemo(() => {
+    const types = new Set(comparisonEntries.flatMap((entry) => entry.profile?.map((instance) => instance.type) || []));
+    const categories = MCU_PERIPHERAL_CATEGORIES.map((category) => ({
+      label: category.label,
+      rows: [...types].filter((type) => category.types.has(type)).map((type) => ({ type })),
+    })).filter((group) => group.rows.length);
+    const uncategorized = [...types].filter((type) => !MCU_PERIPHERAL_CATEGORIES.some((category) => category.types.has(type)));
+    if (uncategorized.length) categories.push({ label: "其他外设", rows: uncategorized.map((type) => ({ type })) });
+    return categories.map((group) => ({
+      ...group,
+      rows: group.rows.map(({ type }) => {
+        const values = comparisonEntries.map((entry) => entry.profile == null ? null : entry.counts.get(type) || 0);
+        const known = values.every((value) => value !== null);
+        return { type, values, different: known && new Set(values).size > 1, uncertain: !known };
+      }),
+    }));
+  }, [comparisonEntries]);
+  const hasFilter = Boolean(filters.vendor || filters.family || filters.shape || filters.pinMin || filters.pinMax
+    || Number(filters.flashMinKB) > 0 || Number(filters.ramMinKB) > 0 || Number(filters.frequencyMinMHz) > 0);
+  const hasSearch = query.trim() !== "" || conditions.length > 0 || hasFilter;
+  const setFilter = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
+  const isCompared = (deviceId) => compareIds.includes(deviceId);
+  function toggleCompared(device) {
+    setCompareIds((current) => current.includes(device.id)
+      ? current.filter((id) => id !== device.id)
+      : current.length >= 2 ? current : [...current, device.id]);
+  }
+  function removeCompared(deviceId) {
+    setCompareIds((current) => current.filter((id) => id !== deviceId));
+    if (comparisonEntries.length <= 2) setCompareOpen(false);
+  }
+  const clearComparison = () => { setCompareIds([]); setCompareOpen(false); };
+  const canCheck = conditions.length > 0 && mode === "all" && view === "match";
+  const checkSignature = JSON.stringify({ conditions, includeProject, protectDebug, project: includeProject ? projectRequests : [] });
+  const feasibilityOf = (device) => feasibility.get(`${device.id}|${checkSignature}`);
+  const openSearchPeripheralGuide = (guide) => onGuide?.(guide, selectedResult
+    ? { mcu: null, vendor: selectedResult.device.vendor }
+    : null);
+
+  useEffect(() => () => feasibilityWorker.current?.terminate(), []);
+
+  function solveInWorker(payload) {
+    if (!feasibilityWorker.current) {
+      const worker = new Worker(new URL("./lib/feasibility.worker.js", import.meta.url), { type: "module" });
+      worker.onmessage = (event) => {
+        const call = feasibilityCalls.current.get(event.data.id);
+        if (!call) return;
+        feasibilityCalls.current.delete(event.data.id);
+        if (event.data.error) call.reject(new Error(event.data.error));
+        else call.resolve(event.data.result);
+      };
+      feasibilityWorker.current = worker;
+    }
+    const id = `f${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return new Promise((resolve, reject) => {
+      feasibilityCalls.current.set(id, { resolve, reject });
+      feasibilityWorker.current.postMessage({ id, ...payload });
+    });
+  }
+
+  /* 引脚数据：固化或本会话已取回的直接用，其余由本地服务器现场转换（与"用于引脚规划"同一条路） */
+  async function pinDataFor(device) {
+    if (isMcuLoaded(device.id)) return ensureMcuLoaded(device.id);
+    return (await fetchRuntimeMcu(device)).data;
+  }
+
+  async function runCheck(device) {
+    const key = `${device.id}|${checkSignature}`;
+    setFeasibility((current) => new Map(current).set(key, { status: "running" }));
+    let entry;
+    try {
+      const mcu = await pinDataFor(device);
+      entry = await solveInWorker({
+        mcu,
+        conditions,
+        options: {
+          vendor: device.vendor,
+          profile: profileOf(index, device) || [],
+          extraRequests: includeProject ? projectRequests : [],
+          mode,
+          protectDebug,
+        },
+      });
+    } catch (error) {
+      entry = { status: "error", reason: error.message };
+    }
+    setFeasibility((current) => new Map(current).set(key, entry));
+  }
+
+  /* 顺序跑：按需转换会写本地缓存，并发几十颗只会让服务器排队 */
+  async function runPageChecks() {
+    setBatchRunning(true);
+    try {
+      for (const { device } of result?.items || []) {
+        if (!feasibilityOf(device)) await runCheck(device);
+      }
+    } finally {
+      setBatchRunning(false);
+    }
+  }
+  const hasUsage = conditions.some((condition) => condition.kind === "usage");
+  const visibleComparisonSpecRows = comparisonSpecRows.filter((row) => !compareOnlyDifferences || row.different || row.uncertain);
+  const visibleComparisonPeripheralGroups = comparisonPeripheralGroups.map((group) => ({
+    ...group,
+    rows: group.rows.filter((row) => !compareOnlyDifferences || row.different || row.uncertain),
+  })).filter((group) => group.rows.length);
 
   return (
     <div className="mcu-selector">
@@ -289,49 +760,551 @@ function McuSelector({ catalog, selectedId, onChange, onPick, loading, notice })
       </select>
       <small>
         {loading ? "正在加载引脚数据…" : (
-          <button type="button" className="linklike" onClick={() => setBrowsing((value) => !value)}>
-            {browsing ? "收起" : "选择其他型号…"}
+          <button type="button" className="linklike" onClick={onOpenPage}>
+            打开 MCU 选型页 →
           </button>
         )}
       </small>
 
       {browsing && (
-        <div className="mcu-browser">
+        <div className="mcu-browser mcu-browser-page">
+          <header className="mcu-search-page-header">
+            <div className="page-navigation-group">
+              <PageNavigation activePage="mcus" onNavigate={onNavigate} />
+              {compareOpen && <button type="button" className="secondary-button" onClick={() => setCompareOpen(false)}>← 返回搜索结果</button>}
+            </div>
+            <div><small>{compareOpen ? "MCU COMPARISON" : "MCU SELECTOR"}</small><h2>{compareOpen ? "MCU 对比" : "MCU 选型"}</h2></div>
+            <span>{compareOpen
+              ? `${comparisonEntries.length} 个型号 / 封装组合`
+              : `当前规划器件：${catalogLabel(getMcuById(selectedId))}`}</span>
+          </header>
+          <McuCompareBar devices={index?.devices || []} ids={compareIds} onChange={setCompareIds}
+            comparing={compareOpen} onCompare={() => setCompareOpen(true)} onReturn={() => setCompareOpen(false)} />
+          {compareOpen ? (
+            <main className="mcu-comparison-view" aria-label="MCU 参数对比">
+              <div className="mcu-comparison-heading">
+                <div>
+                  <strong>逐项比较型号、封装、规格和外设实例</strong>
+                  <p>“未收录”表示本地索引没有该项数据；“—”表示已收录档案中没有该类外设。外设实例数不等于通道数；只看差异时仍保留未知字段。</p>
+                </div>
+                <label className="mcu-compare-diff-toggle">
+                  <input type="checkbox" checked={compareOnlyDifferences} onChange={(event) => setCompareOnlyDifferences(event.target.checked)} />
+                  只看差异
+                </label>
+              </div>
+              {comparisonEntries.length < 2 ? (
+                <div className="mcu-compare-empty">
+                  <strong>至少选择 2 个型号 / 封装组合</strong>
+                  <p>回到搜索结果后，继续添加对比项。</p>
+                  <button type="button" className="secondary-button" onClick={() => setCompareOpen(false)}>返回搜索结果</button>
+                </div>
+              ) : (
+                <div className="mcu-compare-table-wrap">
+                  <table className="mcu-compare-table">
+                    <thead>
+                      <tr>
+                        <th className="mcu-compare-row-label" scope="col">比较项</th>
+                        {comparisonEntries.map(({ device }) => (
+                          <th key={device.id} scope="col">
+                            <div className="mcu-compare-device-heading">
+                              <small>{vendorLabel(device.vendor)} · {device.family || "家族未收录"}</small>
+                              <strong>{device.part}</strong>
+                              <span>{device.package || "封装未收录"} · {device.pinCount ? `${device.pinCount} 脚` : "脚数未知"}</span>
+                              {hasPlaceholder(device.part) && <small className="mcu-placeholder-note">型号中的 x 是数据库等级占位符</small>}
+                              <button type="button" className="linklike" onClick={() => removeCompared(device.id)}>从对比中移除</button>
+                            </div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="mcu-compare-section-row"><th colSpan={comparisonEntries.length + 1}>型号与规格</th></tr>
+                      {visibleComparisonSpecRows.map((row) => (
+                        <tr key={row.label} className={row.different ? "is-different" : ""}>
+                          <th className="mcu-compare-row-label" scope="row">{row.label}</th>
+                          {row.values.map((value, index) => <td key={comparisonEntries[index].device.id}>{value}</td>)}
+                        </tr>
+                      ))}
+                      {visibleComparisonPeripheralGroups.length > 0 && <tr className="mcu-compare-section-row"><th colSpan={comparisonEntries.length + 1}>外设种类与数量</th></tr>}
+                      {visibleComparisonPeripheralGroups.map((group) => (
+                        <Fragment key={group.label}>
+                          <tr className="mcu-compare-category-row"><th colSpan={comparisonEntries.length + 1}>{group.label}</th></tr>
+                          {group.rows.map((row) => (
+                            <tr key={row.type} className={row.different ? "is-different" : ""}>
+                              <th className="mcu-compare-row-label" scope="row">{row.type}</th>
+                              {row.values.map((count, index) => {
+                                const entry = comparisonEntries[index];
+                                const names = count && entry.profile
+                                  ? entry.profile.filter((instance) => instance.type === row.type).map((instance) => instance.name).join("、")
+                                  : "";
+                                return (
+                                  <td key={entry.device.id}>
+                                    {count == null ? "未收录" : count ? `× ${count}` : "—"}
+                                    {names && <small className="mcu-compare-instance-names">{names}</small>}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </Fragment>
+                      ))}
+                      {visibleComparisonSpecRows.length === 0 && visibleComparisonPeripheralGroups.length === 0 && (
+                        <tr><td className="mcu-compare-no-differences" colSpan={comparisonEntries.length + 1}>当前已收录字段相同，没有可显示的差异。</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </main>
+          ) : (
+          <div className="mcu-search-layout">
+            <aside className="mcu-search-filters">
+              <div className="mcu-search-section-title"><strong>筛选条件</strong><span>可组合使用</span></div>
           <input
             type="search"
             value={query}
             autoFocus
-            placeholder="型号 / 系列 / 封装，如 F407 LQFP100"
+            aria-label="型号搜索"
+            placeholder="型号 / 厂商 / 系列 / 封装，如 F407 LQFP100"
             onChange={(event) => setQuery(event.target.value)}
           />
+          <div className="mcu-filters" aria-label="叠加筛选">
+            <select
+              aria-label="厂商"
+              value={filters.vendor}
+              onChange={(event) => setFilters((current) => ({ ...current, vendor: event.target.value, family: "" }))}
+            >
+              <option value="">全部厂商</option>
+              <option value="st">ST</option>
+              <option value="ti">TI</option>
+            </select>
+            <select
+              aria-label="芯片家族"
+              value={filters.family}
+              onChange={(event) => setFilter("family", event.target.value)}
+            >
+              <option value="">全部家族</option>
+              {families.map((item) => (
+                <option key={item.key} value={item.key}>
+                  {filters.vendor ? item.family : `${item.vendor.toUpperCase()} · ${item.family}`}（{item.count} 个封装组合）
+                </option>
+              ))}
+            </select>
+            <select aria-label="封装形态" value={filters.shape} onChange={(event) => setFilter("shape", event.target.value)}>
+              <option value="">全部封装</option>
+              {shapes.map((item) => <option key={item.shape} value={item.shape}>{item.shape}（{item.count}）</option>)}
+            </select>
+            <input
+              type="number" min="0" inputMode="numeric" aria-label="最少引脚数" placeholder="脚数 ≥"
+              value={filters.pinMin} onChange={(event) => setFilter("pinMin", event.target.value)}
+            />
+            <input
+              type="number" min="0" inputMode="numeric" aria-label="最多引脚数" placeholder="≤"
+              value={filters.pinMax} onChange={(event) => setFilter("pinMax", event.target.value)}
+            />
+            {hasFilter && (
+              <button type="button" className="linklike" onClick={() => setFilters({
+                vendor: "", family: "", shape: "", pinMin: "", pinMax: "",
+                flashMinKB: "", ramMinKB: "", frequencyMinMHz: "",
+              })}>清除</button>
+            )}
+          </div>
+          <div className="mcu-spec-filter-group" aria-label="规格筛选">
+            <strong>规格下限</strong>
+            <div className="mcu-spec-filter-grid">
+              <label>
+                <span>Flash ≥ KB</span>
+                <input type="number" min="0" step="1" inputMode="numeric" aria-label="最小 Flash 容量 KB"
+                  value={filters.flashMinKB} onChange={(event) => setFilter("flashMinKB", event.target.value)} />
+              </label>
+              <label>
+                <span>RAM ≥ KB</span>
+                <input type="number" min="0" step="1" inputMode="numeric" aria-label="最小 RAM 容量 KB"
+                  value={filters.ramMinKB} onChange={(event) => setFilter("ramMinKB", event.target.value)} />
+              </label>
+              <label>
+                <span>主频 ≥ MHz</span>
+                <input type="number" min="0" step="1" inputMode="numeric" aria-label="最低主频 MHz"
+                  value={filters.frequencyMinMHz} onChange={(event) => setFilter("frequencyMinMHz", event.target.value)} />
+              </label>
+            </div>
+            <p className="mcu-browser-note">
+              RAM 阈值按 CubeMX 的 Ram 字段；CCM RAM 单独显示，不并入阈值。缺少规格的型号不会被当作满足。
+              {specificationCoverage.st && ` ST 本地索引覆盖 Flash ${specificationCoverage.st.flashKB}/${specificationCoverage.st.total}、RAM ${specificationCoverage.st.ramKB}/${specificationCoverage.st.total}、主频 ${specificationCoverage.st.frequencyMHz}/${specificationCoverage.st.total} 个封装组合。`}
+              {specificationCoverage.ti && " TI SysConfig 当前没有这些数值规格字段。"}
+            </p>
+          </div>
+          {schema && !schema.specifications && (
+            <p className="mcu-browser-note warn">当前器件索引没有规格字段。运行 npm run mcu:catalog 重新生成后可用规格筛选。</p>
+          )}
+          {schema && !schema.peripherals && (
+            <p className="mcu-browser-note warn">
+              当前器件索引是旧版本，没有外设摘要，只能按型号搜索。运行 npm run mcu:catalog 重新生成后即可按外设筛选。
+            </p>
+          )}
+          <div className="mcu-peripheral-input">
+            <input
+              type="search"
+              value={peripheralText}
+              aria-label="所需外设"
+              placeholder="所需外设或用途：SDMMC FMC、SDMMC ≥ 2、SD 4位、SDRAM、RMII"
+              disabled={!vocabulary || !schema?.peripherals}
+              onChange={(event) => { setPeripheralText(event.target.value); setPeripheralError(""); }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") { event.preventDefault(); commitPeripheralText(); }
+                if (event.key === "Backspace" && !peripheralText && conditions.length) {
+                  setConditions((current) => current.slice(0, -1));
+                }
+              }}
+            />
+            {suggestions.length > 0 && (
+              <ul className="mcu-suggestions" aria-label="外设候选">
+                {suggestions.map(({ condition, hint }) => (
+                  <li key={conditionKey(condition)}>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => pickSuggestion(condition)}
+                    >
+                      <strong>{conditionLabel(condition)}</strong>
+                      <span>{hint}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          {peripheralError && (
+            <p className="mcu-browser-note warn">
+              {peripheralError}
+              {similar.length > 0 && (
+                <>
+                  。是不是要找：
+                  {similar.map((condition) => (
+                    <button key={conditionKey(condition)} type="button" className="linklike mcu-similar" onClick={() => pickSuggestion(condition)} title="加入这个条件">
+                      {conditionLabel(condition)}
+                    </button>
+                  ))}
+                </>
+              )}
+            </p>
+          )}
+          {index && (
+            <button type="button" className="linklike mcu-catalog-toggle" onClick={() => setCatalogOpen((value) => !value)}>
+              {catalogOpen ? "收起能力目录" : "按能力浏览…"}
+            </button>
+          )}
+          {catalogOpen && coverage && (
+            <div className="mcu-capabilities">
+              {CAPABILITY_CATEGORIES.map((category) => (
+                <section key={category.id}>
+                  <h4>{category.label}</h4>
+                  <div>
+                    {CAPABILITIES.filter((item) => item.category === category.id).map((capability) => (
+                      <div className="guide-capability-row" key={capability.id}><button
+                        key={capability.id}
+                        type="button"
+                        className="mcu-capability"
+                        title={[capability.hint, capability.note].filter(Boolean).join("。")}
+                        onClick={() => pickSuggestion({ kind: "capability", value: capability.id, min: 1 })}
+                      >
+                        <strong>{capability.label}</strong>
+                        {Object.entries(coverage.get(capability.id)).map(([vendor, entry]) => (
+                          <span key={vendor} className={entry.mapped && entry.devices ? "" : "is-missing"}>
+                            {vendor.toUpperCase()} {!entry.mapped ? "未收录" : entry.devices ? entry.devices : "本机库 0"}
+                          </span>
+                        ))}
+                      </button><button type="button" className="guide-info" aria-label={`${capability.label} 外设介绍`} onClick={() => openSearchPeripheralGuide(PERIPHERAL_GUIDES.find((g) => g.id === capability.id))}>ⓘ</button></div>
+                    ))}
+                  </div>
+                </section>
+              ))}
+              <p className="mcu-browser-note">
+                数字是本机厂商库里带该能力的（型号, 封装）数。"未收录"表示这家的数据库里没有可核实的对应外设名，
+                不代表该厂商没有这类产品——例如 MIPI CSI-2、Neural-ART 只在 STM32N6 上，而本机 CubeMX 库没有 N6。
+                悬停可看说明。
+              </p>
+            </div>
+          )}
+          {conditions.length > 0 && (
+            <div className="mcu-conditions">
+              {conditions.map((condition) => (
+                <span key={conditionKey(condition)} className="mcu-condition" title={usageById(condition.value)?.note}>
+                  {condition.kind === "usage" ? (
+                    <>
+                      {usageById(condition.value).label}
+                      {usageById(condition.value).params.map((param) => (
+                        <select
+                          key={param.key}
+                          aria-label={param.label}
+                          value={String(condition.params[param.key])}
+                          onChange={(event) => {
+                            const picked = param.values.find((value) => String(value) === event.target.value);
+                            setParam(condition, param.key, picked);
+                          }}
+                        >
+                          {param.values.map((value) => <option key={value} value={String(value)}>{param.format(value)}</option>)}
+                        </select>
+                      ))}
+                    </>
+                  ) : conditionLabel({ ...condition, min: 1 })}
+                  {condition.kind !== "instance" && (
+                    <span className="mcu-condition-count" title="至少几个实例">
+                      <button type="button" aria-label="减少数量" disabled={condition.min <= 1} onClick={() => setMin(condition, condition.min - 1)}>−</button>
+                      ≥{condition.min}
+                      <button type="button" aria-label="增加数量" onClick={() => setMin(condition, condition.min + 1)}>+</button>
+                    </span>
+                  )}
+                  <button type="button" aria-label={`移除 ${conditionLabel(condition)}`} onClick={() => removeCondition(condition)}>×</button>
+                </span>
+              ))}
+              {conditions.length > 1 && (
+                <span className="mcu-condition-mode" role="group" aria-label="多个外设条件">
+                  <button type="button" aria-pressed={mode === "all"} onClick={() => setMode("all")}>全部满足</button>
+                  <button type="button" aria-pressed={mode === "any"} onClick={() => setMode("any")}>任意一个</button>
+                </span>
+              )}
+            </div>
+          )}
+            </aside>
+            <section className="mcu-search-results" aria-label="MCU 搜索结果">
           {indexError && <p className="mcu-browser-note error">{indexError}</p>}
           {!indexError && !index && <p className="mcu-browser-note">正在载入器件索引…</p>}
-          {index && query.trim() === "" && (
+          {index && !hasSearch && (
             <p className="mcu-browser-note">
-              共 {index.length} 个型号可选。引脚数据在选中时由本地服务器现场转换，
+              索引包含 {index.devices.length} 个型号 / 封装组合条目（{(index.sources || []).map((source) => `${source.tool || source.vendor.toUpperCase()} ${source.release || ""} ${source.count} 项`).join("，")}），
+              索引生成于 {index.generatedAt}。
+              {(index.gaps || []).length > 0 && ` 缺失的数据源：${index.gaps.map((gap) => `${gap.vendor.toUpperCase()}（${gap.reason}）`).join("；")}。`}
+              SD 4 位、SDRAM 这类用途检查目前只覆盖 STM32。引脚数据在选中或检查组合时由本地服务器现场转换，
               需要本机装有 CubeMX / SysConfig。
             </p>
           )}
-          {index && query.trim() !== "" && matches.length === 0 && (
-            <p className="mcu-browser-note">没有匹配的型号</p>
+          {result && hasSearch && (
+            <p className="mcu-browser-note">
+              {view === "incomplete"
+                ? `${result.total} 个封装组合有对应外设，但当前封装引出的信号不全`
+                : view === "unknown"
+                  ? `${result.total} 个封装组合其余条件满足，但下列条件数据未知（不是"不支持"）`
+                  : result.total === 0 ? "没有匹配的封装组合" : `共 ${result.total} 个封装组合匹配`}
+              {result.unrecorded > 0 && `；另有 ${result.unrecorded} 个封装组合外设数据未收录，未参与外设筛选`}
+              {result.specUnknownCount > 0 && `；另有 ${result.specUnknownCount} 个封装组合缺少所需规格字段，无法判断门槛，未计入结果`}
+              {view === "match" && conditions.length > 0 && result.total > 0 && (hasUsage
+                ? "。✓ 表示该封装引出了所需的全部信号，各接口能否同时分配到不冲突的脚仍需在规划中确认"
+                : "。括号内为该封装引出的信号数；外设存在不代表用途一定接得成，请在规划中确认")}
+            </p>
           )}
-          <ul className="mcu-browser-list">
-            {matches.map((item) => (
-              <li key={item.id}>
-                <button type="button" onClick={() => { setBrowsing(false); onPick(item); }}>
-                  <strong>{item.part}</strong>
-                  <span>{item.package} · {item.pinCount} 脚</span>
-                  <em>{item.series}{item.core ? ` · ${item.core}` : ""}</em>
-                </button>
-              </li>
+          {canCheck && result?.items.length > 0 && (
+            <div className="mcu-feasibility-bar">
+              <button type="button" className="secondary-button" disabled={batchRunning} onClick={runPageChecks}>
+                {batchRunning ? "正在检查…" : "检查本页组合可行性"}
+              </button>
+              <Toggle checked={protectDebug} onChange={setProtectDebug}>保留调试脚</Toggle>
+              {projectRequests.length > 0 && (
+                <Toggle checked={includeProject} onChange={setIncludeProject}>
+                  叠加当前工程 {projectRequests.length} 路接口
+                </Toggle>
+              )}
+            </div>
+          )}
+          {result && view !== "match" && (
+            <p className="mcu-browser-note">
+              <button type="button" className="linklike" onClick={() => { setIncomplete(false); setShowUnknown(false); }}>
+                返回满足条件的型号
+              </button>
+            </p>
+          )}
+          {result && view === "match" && hasUsage && result.incompleteCount > 0 && (
+            <p className="mcu-browser-note">
+              <button type="button" className="linklike" onClick={() => setIncomplete(true)}>
+                另有 {result.incompleteCount} 个封装组合有外设但信号不全，查看缺哪些
+              </button>
+            </p>
+          )}
+          {result && view === "match" && result.uncovered > 0 && (
+            <p className="mcu-browser-note">
+              <button type="button" className="linklike" onClick={() => setShowUnknown(true)}>
+                另有 {result.uncovered} 个封装组合其余条件满足，但有条件数据未知（未映射或记录不足），查看
+              </button>
+            </p>
+          )}
+          <p className="mcu-browser-note">按家族查看匹配结果：点击家族展开型号，再点击子系列展开具体型号，每页最多显示 30 个封装组合。</p>
+          <div className="mcu-browser-groups">
+            {resultGroups.map((family) => (
+              <details className="mcu-family-group" key={family.key} open={expandedFamily === family.key}
+                onToggle={(event) => {
+                  if (event.currentTarget.open && expandedFamily !== family.key) { setExpandedFamily(family.key); setExpandedSeries(""); setPage(0); }
+                  else if (!event.currentTarget.open && expandedFamily === family.key) setExpandedFamily("");
+                }}>
+                <summary>
+                  <strong>{family.family}</strong>
+                  <span>{family.vendor.toUpperCase()} · {family.modelCount} 个型号 / {family.entryCount} 个封装组合</span>
+                </summary>
+                {expandedFamily === family.key && family.series.map((series) => (
+                  <details className="mcu-series-group" key={series.name} open={expandedSeries === series.name}
+                    onToggle={(event) => {
+                      event.stopPropagation();
+                      if (event.currentTarget.open && expandedSeries !== series.name) { setExpandedSeries(series.name); setPage(0); }
+                      else if (!event.currentTarget.open && expandedSeries === series.name) setExpandedSeries("");
+                    }}>
+                    <summary><strong>{series.name}</strong><span>{new Set(series.entries.map(({ device }) => device.part)).size} 个型号 / {series.entries.length} 个封装组合</span></summary>
+                    {expandedSeries === series.name && <ul className="mcu-browser-list">
+                      {visibleItems.map(({ device, hits, unknown }) => (
+                        <li key={device.id} className={["has-actions", selectedResult?.device.id === device.id ? "is-selected" : ""].filter(Boolean).join(" ")}>
+                          <button type="button" className="mcu-result-pick" title="查看器件详情" onClick={() => setSelectedDeviceId(device.id)}>
+                            <strong title={hasPlaceholder(device.part) ? "x 是厂商数据库的等级占位符，不是完整订货型号" : undefined}>{device.part}</strong>
+                            <span>{device.package} · {device.pinCount ? `${device.pinCount} 脚` : "脚数未知"}</span>
+                            <em>{device.series}{device.core ? ` · ${device.core}` : ""}{hasPeripheralData(device) ? "" : " · 外设数据未收录"}</em>
+                            {hits.length > 0 && <em className={view === "incomplete" ? "mcu-hit is-missing" : "mcu-hit"}>{hits.map(describeHit).join(" · ")}</em>}
+                            {unknown?.length > 0 && <em className="mcu-hit is-unknown">数据未知：{unknown.map((condition) => conditionLabel(condition)).join("、")}</em>}
+                            <em className="mcu-use">查看详情 →</em>
+                            {canCheck && feasibilityOf(device) && <FeasibilityLine entry={feasibilityOf(device)} debugKept={protectDebug} />}
+                          </button>
+                          <div className="mcu-result-actions">
+                            <button
+                              type="button"
+                              className="mcu-compare-pick"
+                              aria-pressed={isCompared(device.id)}
+                              disabled={!isCompared(device.id) && compareIds.length >= 2}
+                              title={!isCompared(device.id) && compareIds.length >= 2 ? "最多同时对比 2 个型号 / 封装组合" : undefined}
+                              onClick={() => toggleCompared(device)}
+                            >
+                              {isCompared(device.id) ? "已加入 ✓" : "加入对比"}
+                            </button>
+                            {canCheck && (
+                              <button
+                                type="button"
+                                className="mcu-check"
+                                disabled={feasibilityOf(device)?.status === "running"}
+                                title="把这些条件交给引脚求解器，在这颗片子的完整引脚表上一起分配"
+                                onClick={() => runCheck(device)}
+                              >
+                                {feasibilityOf(device) ? "重查" : "检查组合"}
+                              </button>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>}
+                    {expandedSeries === series.name && result.pageCount > 1 && <div className="mcu-pager">
+                      <button type="button" disabled={result.page === 0} onClick={() => setPage(result.page - 1)}>上一页</button>
+                      <span>{series.name} · {result.page + 1} / {result.pageCount}</span>
+                      <button type="button" disabled={result.page >= result.pageCount - 1} onClick={() => setPage(result.page + 1)}>下一页</button>
+                    </div>}
+                  </details>
+                ))}
+              </details>
             ))}
-          </ul>
+          </div>
+            </section>
+            <aside className="mcu-search-details" aria-label="所选 MCU 详情">
+              {selectedResult ? (
+                <>
+                  <header className="mcu-detail-heading">
+                    <small>{selectedResult.device.vendor.toUpperCase()} · {selectedResult.device.family || "家族未收录"}</small>
+                    <h2>{selectedResult.device.part}</h2>
+                    <p>{selectedResult.device.package} · {selectedResult.device.pinCount ? `${selectedResult.device.pinCount} 脚` : "脚数未知"}</p>
+                  </header>
+                  <div className="mcu-detail-specs">
+                    <div><span>子系列</span><strong>{selectedResult.device.series || "未收录"}</strong></div>
+                    <div><span>内核</span><strong>{selectedResult.device.core || "未收录"}</strong></div>
+                    <div><span>Flash</span><strong>{formatMemoryKB(selectedSpecs.flashKB)}</strong></div>
+                    <div><span>RAM</span><strong>{formatRamSpecs(selectedSpecs)}</strong></div>
+                    <div><span>最高频率</span><strong>{Number.isFinite(selectedSpecs.frequencyMHz) ? `${selectedSpecs.frequencyMHz} MHz` : "未收录"}</strong></div>
+                    <div><span>供电电压范围</span><strong>{formatVoltageRange(selectedSpecs)}</strong></div>
+                  </div>
+                  <section className="mcu-detail-peripherals">
+                    <header>
+                      <h3>外设资源</h3>
+                      <span>{peripheralSummary
+                        ? `${peripheralSummary.typeCount} 类 · ${peripheralSummary.instanceCount} 个实例`
+                        : "数据状态"}</span>
+                    </header>
+                    {!selectedProfile ? (
+                      <p className="mcu-browser-note warn">该型号 / 封装的外设档案未收录，不能据此判断外设缺失。</p>
+                    ) : peripheralSummary.typeCount === 0 ? (
+                      <p className="mcu-browser-note">当前档案没有记录到外设实例。</p>
+                    ) : peripheralSummary.groups.map((group) => (
+                      <section className="mcu-detail-peripheral-group" key={group.label}>
+                        <h4>{group.label}</h4>
+                        {group.rows.map((row) => {
+                          const guide = guideForPeripheral({ type: row.type, label: row.type, instance: row.entries[0]?.name });
+                          return (
+                            <div className="mcu-detail-peripheral" key={row.type}>
+                              <div>
+                                <strong>{row.type}</strong><span>× {row.count}</span>
+                                {guide && <button type="button" className="guide-info" aria-label={`${row.type} 外设介绍`} onClick={() => openSearchPeripheralGuide(guide)}>ⓘ</button>}
+                              </div>
+                              <small>{row.entries.map((entry) => `${entry.name}${entry.signals.length ? `（${entry.signals.length} 信号）` : ""}`).join("、")}</small>
+                            </div>
+                          );
+                        })}
+                      </section>
+                    ))}
+                  </section>
+                  <div className="mcu-detail-source">
+                    <strong>数据与封装</strong>
+                    <span>{index?.sources?.find((source) => source.vendor === selectedResult.device.vendor)?.release || "本地厂商库"} · 索引生成于 {index?.generatedAt || "未知"}</span>
+                    <span>规格记录：{selectedSpecs.sourceRef
+                      ? `${index?.sources?.find((source) => source.vendor === selectedResult.device.vendor)?.tool || "厂商数据库"} ${index?.sources?.find((source) => source.vendor === selectedResult.device.vendor)?.release || ""} · ${selectedSpecs.sourceRef}`
+                      : `${vendorLabel(selectedResult.device.vendor)} 本地数据源未提供这些规格字段`}</span>
+                    <small>规格未收录不代表数值为 0 或器件不支持。RAM 阈值只按 CubeMX Ram 字段；CCM RAM 单列。外设实例数不代表通道数。</small>
+                  </div>
+                  <button
+                    type="button"
+                    className="primary-button mcu-detail-use"
+                    disabled={loading}
+                    onClick={async () => {
+                      const loaded = await onPick(selectedResult.device);
+                      if (loaded !== false) onClosePage?.();
+                    }}
+                  >
+                    {loading ? "正在加载引脚数据…" : "用于引脚规划 →"}
+                  </button>
+                </>
+              ) : (
+                <div className="mcu-detail-empty">
+                  <strong>{index ? "搜索并选择一颗 MCU" : "器件索引载入中"}</strong>
+                  <p>选择结果后，这里会显示当前封装的外设实例、引脚数、内核和数据状态。</p>
+                </div>
+              )}
+            </aside>
+          </div>
+          )}
         </div>
       )}
 
       {notice && <p className={`mcu-browser-note ${notice.kind}`}>{notice.text}</p>}
     </div>
   );
+}
+
+/*
+  一颗器件的组合可行性结论。措辞跟着 feasibility.js 的四种结论走：
+  只有"每次求解都穷举完毕"才说"确认无法"，没跑完的如实说"未找到"。
+*/
+function FeasibilityLine({ entry, debugKept }) {
+  if (entry.status === "running") return <em className="mcu-feasibility">正在求解…</em>;
+  if (entry.status === "error") return <em className="mcu-feasibility is-bad">无法检查：{entry.reason}</em>;
+  const unchecked = entry.unchecked?.length ? `；未参与求解：${entry.unchecked.join("、")}` : "";
+  if (entry.status === "skipped") return <em className="mcu-feasibility">{entry.reason}{unchecked}</em>;
+  if (entry.status === "feasible") {
+    const plan = entry.solution.map((group) => `${group.instance} ${group.pins.map((item) => item.pin).join("/")}`).join("；");
+    const notes = [...new Set(entry.requests.map((item) => item.note).filter(Boolean))];
+    return (
+      <em className="mcu-feasibility is-ok" title={plan}>
+        ✓ 可同时分配（{entry.solution.reduce((sum, group) => sum + group.pins.length, 0)} 脚，悬停看方案）
+        {notes.length ? `，按默认接法：${notes.join("、")}` : ""}{unchecked}
+      </em>
+    );
+  }
+  if (entry.status === "infeasible") {
+    return (
+      <em className="mcu-feasibility is-bad">
+        ✗ 确认无法同时分配（已穷举{debugKept ? "，保留了调试脚和晶振脚" : "，保留了晶振脚"}）{unchecked}
+      </em>
+    );
+  }
+  return <em className="mcu-feasibility is-warn">? 未找到无冲突方案，但搜索未穷尽，不能断定不可行{unchecked}</em>;
 }
 
 /*
@@ -536,7 +1509,7 @@ function RequirementsAssistant({ mcuId, open, onClose, onApply }) {
   动作等于逼人先添加再回头删。
 */
 function PeripheralSidebar({
-  catalog, activePeripheral, onSelect, pinnedInstances, onToggleRequest, defaultOpenSection = "connectivity",
+  catalog, activePeripheral, onSelect, pinnedInstances, onToggleRequest, onGuide, defaultOpenSection = "connectivity",
 }) {
   /* 单开手风琴。原先是一个 Set，能同时摊开任意多个分类——H743 光 Connectivity
      一类就有 25 个实例（约 1000px），两三类叠起来左栏就没底了。 */
@@ -579,6 +1552,7 @@ function PeripheralSidebar({
           <span>{item.label}</span>
           <small>{added ? "已加入需求" : categoryLabel ? `${categoryLabel} · ${item.status}` : item.status}</small>
         </button>
+        {guideForPeripheral(item) && <button type="button" className="guide-info" aria-label={`${item.label} 外设介绍`} onClick={() => onGuide?.(guideForPeripheral(item))}>ⓘ</button>}
         {addable && (
           <button
             type="button"
@@ -686,7 +1660,7 @@ function PeripheralSidebar({
 
 /* 导出供 tests/render.mjs 单独渲染：这两个面板只有在选中外设或求解完成后
    才出现，整体渲染 App 覆盖不到，而它们恰恰是改动最集中的地方。 */
-export function PeripheralInspector({ mcuData, peripheral, pinnedInstances, onToggleFixed, onSelectPin }) {
+export function PeripheralInspector({ mcuData, peripheral, pinnedInstances, onToggleFixed, onSelectPin, onGuide }) {
   if (!peripheral) {
     return <div className="peripheral-empty">从左侧展开一个分类，选择 SPI1、I2C1 或其他外设实例。</div>;
   }
@@ -714,6 +1688,7 @@ export function PeripheralInspector({ mcuData, peripheral, pinnedInstances, onTo
           ? `${visibleSignalCount} 个信号可映射到多个 GPIO 复用位置。${peripheral.timerMode && peripheral.timerMode !== "general" ? `${TIMER_MODE_LABELS[peripheral.timerMode]}已启用。` : ""}点击候选引脚可在封装图中定位。`
           : peripheral.description}
       </p>
+      {guideForPeripheral(peripheral) && <div className="guide-inline"><p>{guideForPeripheral(peripheral).summary}</p><button type="button" className="linklike" onClick={() => onGuide?.(guideForPeripheral(peripheral))}>了解这个外设 →</button></div>}
       {peripheral.timerMode && (
         <div className="timer-mode-panel">
           <div className="timer-mode-panel-heading">
@@ -932,7 +1907,7 @@ export function PinInspector({ mcu, pin, excluded, onToggleExclude }) {
         </div>
         {pin.kind === "gpio" && (
           <button type="button" className={excluded ? "danger-button" : "secondary-button"} onClick={onToggleExclude}>
-            {excluded ? "恢复使用" : "排除此脚"}
+            {excluded ? "解除已使用锁定" : "锁定为已使用"}
           </button>
         )}
       </div>
@@ -964,7 +1939,7 @@ export function PinInspector({ mcu, pin, excluded, onToggleExclude }) {
   );
 }
 
-export function SolutionPanel({ result, pending, stale, activeIndex, setActiveIndex, lockedGroups, onToggleLock, onExport, onRerun }) {
+export function SolutionPanel({ result, pending, stale, activeIndex, setActiveIndex, lockedGroups, onToggleLock, onToggleSolutionLocks = () => {}, onExport, onRerun }) {
   const [exportOpen, setExportOpen] = useState(false);
   if (pending) {
     return (
@@ -983,7 +1958,7 @@ export function SolutionPanel({ result, pending, stale, activeIndex, setActiveIn
     return result.proven ? (
       <div className="error-state">
         <strong>确认无解</strong>
-        <p>已穷举全部组合，当前约束下这些接口无法同时分配。请减少接口数量、解除锁定、恢复被排除引脚，或关闭调试/晶振保护。</p>
+        <p>已穷举全部组合，当前约束下这些接口无法同时分配。请减少接口数量、解除锁定、解除已使用引脚，或关闭调试/晶振保护。</p>
       </div>
     ) : (
       <div className="warn-state">
@@ -999,6 +1974,8 @@ export function SolutionPanel({ result, pending, stale, activeIndex, setActiveIn
     );
   }
   const solution = result.solutions[activeIndex] || result.solutions[0];
+  const solutionLocked = solution.groups.length > 0
+    && solution.groups.every((group) => lockedGroups.some((item) => solutionGroupKey(item) === solutionGroupKey(group)));
   return (
     <section className="solution-panel">
       {stale && (
@@ -1020,6 +1997,13 @@ export function SolutionPanel({ result, pending, stale, activeIndex, setActiveIn
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          className={`text-button solution-lock-all${solutionLocked ? " is-locked" : ""}`}
+          onClick={() => onToggleSolutionLocks(solution)}
+        >
+          {solutionLocked ? "解除本方案锁定" : "锁定本方案引脚"}
+        </button>
         <div className="export-menu">
           <button type="button" className="text-button" onClick={() => setExportOpen((open) => !open)} aria-expanded={exportOpen}>
             导出 ⌄
@@ -1060,7 +2044,7 @@ export function SolutionPanel({ result, pending, stale, activeIndex, setActiveIn
                   <strong>{group.instance}</strong>
                   <small>{DEFINITIONS[group.type].variants[group.variant]?.label}</small>
                 </div>
-                <button type="button" className="text-button" onClick={() => onToggleLock(group)}>{locked ? "解除锁定" : "锁定整组"}</button>
+                <button type="button" className="text-button" onClick={() => onToggleLock(group)}>{locked ? "解除锁定" : "锁定这组引脚"}</button>
               </header>
               {group.assignments.map((assignment) => (
                 <div className="assignment" key={assignment.signal}>
@@ -1242,6 +2226,14 @@ export function DiffPanel({ solutions = [], activeIndex = 0, baseline, requests 
 }
 
 function App() {
+  const [activePage, setActivePage] = useState(() => (
+    typeof window !== "undefined" && window.location.hash.startsWith("#/mcus")
+      ? "mcus"
+      : typeof window !== "undefined" && window.location.hash.startsWith("#/peripherals") ? "peripherals" : "planner"
+  ));
+  const [peripheralGuide, setPeripheralGuide] = useState(null);
+  const [peripheralGuideContext, setPeripheralGuideContext] = useState(null);
+  const [guideSearch, setGuideSearch] = useState(null);
   const [restored] = useState(readStoredProject);
   /* main.jsx 已经把这颗片子的引脚表取回来了；万一没有（直接挂载 App 的场景）
      就退回默认那颗，而不是让整棵组件树对着 null 崩掉。 */
@@ -1252,6 +2244,48 @@ function App() {
   /* 按需器件的加载结果单独提示：它与工程文件的提示（projectNotice）来源不同，
      混在一起会互相覆盖。 */
   const [mcuNotice, setMcuNotice] = useState(null);
+
+  useEffect(() => {
+    const syncPage = () => setActivePage(window.location.hash.startsWith("#/mcus")
+      ? "mcus"
+      : window.location.hash.startsWith("#/peripherals") ? "peripherals" : "planner");
+    window.addEventListener("popstate", syncPage);
+    window.addEventListener("hashchange", syncPage);
+    return () => {
+      window.removeEventListener("popstate", syncPage);
+      window.removeEventListener("hashchange", syncPage);
+    };
+  }, []);
+
+  const pageLocations = useRef({});
+
+  function navigatePage(nextPage) {
+    pageLocations.current[activePage] = window.location.hash;
+    const hash = pageLocations.current[nextPage] || (nextPage === "mcus" ? "#/mcus" : nextPage === "peripherals" ? "#/peripherals" : "#/planner");
+    setActivePage(nextPage);
+    if (typeof window !== "undefined" && window.location.hash !== hash) {
+      window.history.pushState(window.history.state, "", `${window.location.pathname}${window.location.search}${hash}`);
+    }
+  }
+
+  function openMcuSearch(preset = null) {
+    if (preset) setGuideSearch(preset);
+    navigatePage("mcus");
+  }
+
+  function closeMcuSearch() {
+    navigatePage("planner");
+  }
+
+  function openPeripheralGuide(guide, context = null) {
+    setPeripheralGuideContext(context);
+    setPeripheralGuide(guide);
+  }
+
+  function closePeripheralGuide() {
+    setPeripheralGuide(null);
+    setPeripheralGuideContext(null);
+  }
 
   /* 主题。初值从 localStorage 读，与 index.html 里那段抢跑脚本得出的结论一致，
      所以挂载时不会闪。 */
@@ -1357,6 +2391,10 @@ function App() {
   const fanoutFileRef = useRef(null);
   const fanoutSolutionRef = useRef(null);
   const peripheralCatalog = useMemo(() => buildPeripheralCatalog(mcu, mcuRecord.uiProfile), [mcu, mcuRecord.uiProfile]);
+  const plannerTemplateTypes = useMemo(() => Object.keys(DEFINITIONS).filter((type) => (
+    requestTypes.includes(type)
+      && (type === "GPIO" ? mcu.pins.some((pin) => pin.kind === "gpio") : instancesForType(mcu, type).length > 0)
+  )), [mcu, requestTypes]);
 
   useEffect(() => {
     const worker = new Worker(new URL("./lib/solver.worker.js", import.meta.url), { type: "module" });
@@ -1465,7 +2503,7 @@ function App() {
     片子的以太网命名对不上，与其让人排半天才发现无解，不如当场说清楚。
   */
   async function handleMcuPick(entry) {
-    if (entry.id === selectedMcuId) return;
+    if (entry.id === selectedMcuId) return true;
     setMcuLoading(true);
     setMcuNotice(null);
     try {
@@ -1475,9 +2513,11 @@ function App() {
       setMcuNotice(warnings.length > 0
         ? { kind: "warn", text: `${record.partNumber}：${warnings.join("；")}` }
         : { kind: "ok", text: `${record.partNumber} 已载入${cached ? "（缓存）" : ""}，未固化进目录` });
+      return true;
     } catch (error) {
       setMcuLoading(false);
       setMcuNotice({ kind: "error", text: `${entry.part} 加载失败：${error.message}` });
+      return false;
     }
   }
 
@@ -1572,6 +2612,23 @@ function App() {
     setLockedGroups((current) => current.filter((group) => live.has(`${group.type}:${group.variant}`)));
   }
 
+  function addPeripheralPlannerTemplate(template, context = "外设用途") {
+    if (!template || !plannerTemplateTypes.includes(template.type)) {
+      setProjectNotice({ kind: "warn", text: `当前 MCU 的数据未识别到 ${template?.type || "该外设"} 规划实例` });
+      navigatePage("planner");
+      return;
+    }
+    const existing = requests.find((request) => request.type === template.type && request.variant === template.variant);
+    if (existing) {
+      setProjectNotice({ kind: "ok", text: `${context}对应的 ${template.label} 已在需求列表中` });
+      navigatePage("planner");
+      return;
+    }
+    updateRequests([...requests, createRequest(template.type, { variant: template.variant })]);
+    setProjectNotice({ kind: "ok", text: `已将 ${context}（${template.label}）加入需求，请生成方案检查引脚冲突` });
+    navigatePage("planner");
+  }
+
   function toggleExclude(pin) {
     setHighlightedPeripheral(null);
     const next = new Set(excludedPins);
@@ -1589,6 +2646,15 @@ function App() {
     const next = exists
       ? lockedGroups.filter((item) => !(item.type === group.type && item.instance === group.instance))
       : [...lockedGroups, { ...group, locked: true }];
+    setLockedGroups(next);
+    runAllocation({ lockedGroups: next });
+  }
+
+  function toggleSolutionLocks(solution) {
+    const groups = solution?.groups || [];
+    if (!groups.length) return;
+    const allLocked = groups.every((group) => lockedGroups.some((item) => solutionGroupKey(item) === solutionGroupKey(group)));
+    const next = updateSolutionLocks(lockedGroups, solution, !allLocked);
     setLockedGroups(next);
     runAllocation({ lockedGroups: next });
   }
@@ -1770,6 +2836,7 @@ function App() {
         <div>
           <span className="product-kicker">MCU PIN PLANNER</span>
           <h1>MCU 引脚规划器</h1>
+          <PageNavigation activePage={activePage} onNavigate={navigatePage} />
         </div>
         <div className="header-tools">
           <div className="header-utility">
@@ -1788,6 +2855,13 @@ function App() {
             onPick={handleMcuPick}
             loading={mcuLoading}
             notice={mcuNotice}
+            projectRequests={requests}
+            onGuide={openPeripheralGuide}
+            guideSearch={guideSearch}
+            pageOpen={activePage === "mcus"}
+            onOpenPage={() => openMcuSearch()}
+            onClosePage={closeMcuSearch}
+            onNavigate={navigatePage}
           />
           <div className="project-tools">
             <span>工程</span>
@@ -1827,14 +2901,14 @@ function App() {
           </div>
         </div>
       </header>
-      {projectNotice && (
+      {projectNotice && activePage === "planner" && (
         <p className={`project-notice project-notice-${projectNotice.kind}`} aria-live="polite">
           {projectNotice.text}
           <button type="button" onClick={() => setProjectNotice(null)} aria-label="关闭提示">×</button>
         </p>
       )}
 
-      <div className="workspace">
+      <div className="workspace" hidden={activePage !== "planner"}>
         <aside className="control-panel">
           <div className="control-panel-scroll">
             {/* 助手本体在右侧抽屉里，这里只留入口——见 RequirementsAssistant 顶部注释 */}
@@ -1847,6 +2921,7 @@ function App() {
               catalog={peripheralCatalog}
               activePeripheral={activePeripheral}
               onSelect={selectPeripheral}
+              onGuide={openPeripheralGuide}
               onToggleRequest={togglePeripheralRequest}
               pinnedInstances={pinnedInstances}
               defaultOpenSection={mcuRecord.uiProfile === "ti-mspm0" ? "communications" : "connectivity"}
@@ -1889,7 +2964,7 @@ function App() {
           <div className="control-panel-actions">
             <div className="action-summary">
               <span className={`section-count${plannedPinCount > gpioBudget ? " is-over" : ""}`}>
-                {requests.length} 路 · {plannedPinCount} / {gpioBudget} 脚
+                {requests.length} 路 · {plannedPinCount} / {gpioBudget} 脚 · 已使用锁定 {excludedPins.size}
               </span>
               <div className="action-disclosures">
                 <button
@@ -1924,7 +2999,7 @@ function App() {
                   </span>
                 ))}
                 <span><i className="legend-protected" />保护</span>
-                <span><i className="legend-excluded" />排除</span>
+                 <span><i className="legend-excluded" />已使用锁定</span>
               </div>
             )}
             <button
@@ -1944,10 +3019,15 @@ function App() {
               <span>{mcu.package}</span>
               <strong>{mcu.pinCount} PIN · {mcu.packageSize}</strong>
             </div>
-            <label>
-              <span className="sr-only">搜索引脚或功能</span>
-              <input value={search} onChange={(event) => { setHighlightedPeripheral(null); setSearch(event.target.value); }} placeholder="搜索 PA5、SPI1_SCK、ADC..." />
-            </label>
+            <div className="pinout-toolbar-actions">
+              <button type="button" className="secondary-button pinout-export-button" onClick={() => downloadPinDefinitions(mcu)}>
+                导出全部引脚 CSV
+              </button>
+              <label>
+                <span className="sr-only">搜索引脚或功能</span>
+                <input value={search} onChange={(event) => { setHighlightedPeripheral(null); setSearch(event.target.value); }} placeholder="搜索 PA5、SPI1_SCK、ADC..." />
+              </label>
+            </div>
           </div>
           <PackageView
             mcuData={mcu}
@@ -1994,6 +3074,7 @@ function App() {
             <PeripheralInspector
               mcuData={mcu}
               peripheral={activePeripheral}
+              onGuide={openPeripheralGuide}
               pinnedInstances={pinnedInstances}
               onToggleFixed={toggleFixed}
               onSelectPin={selectPeripheralPin}
@@ -2016,6 +3097,7 @@ function App() {
             setActiveIndex={setActiveIndex}
             lockedGroups={lockedGroups}
             onToggleLock={toggleLock}
+            onToggleSolutionLocks={toggleSolutionLocks}
             onExport={exportSolution}
           />
           {result?.solutions?.length > 0 && (
@@ -2034,11 +3116,46 @@ function App() {
         </aside>
       </div>
 
+      {activePage === "peripherals" && <PeripheralDirectoryPage
+        onNavigate={navigatePage}
+        onClose={() => navigatePage("planner")}
+        onSearch={(guide) => {
+          const preset = guide.searchCondition ? { condition: guide.searchCondition } : { id: guide.id };
+          openMcuSearch(preset);
+        }}
+        onSearchUsage={(usage) => openMcuSearch({ condition: { kind: "usage", value: usage.id, params: defaultParams(usage), min: 1 } })}
+        onPlanTemplate={addPeripheralPlannerTemplate}
+        onPlanUsage={addPeripheralPlannerTemplate}
+        mcu={mcu}
+        mcuRecord={mcuRecord}
+        plannerTypes={plannerTemplateTypes}
+      />}
+
       <RequirementsAssistant
         mcuId={selectedMcuId}
         open={assistantOpen}
         onClose={() => setAssistantOpen(false)}
         onApply={applyAssistantAnalysis}
+      />
+      <PeripheralGuidePanel
+        guide={peripheralGuide}
+        mcu={peripheralGuideContext ? peripheralGuideContext.mcu : mcu}
+        mcuVendor={peripheralGuideContext?.vendor ? vendorLabel(peripheralGuideContext.vendor) : mcuRecord.vendor}
+        onClose={closePeripheralGuide}
+        onSearch={(guide) => { closePeripheralGuide(); openMcuSearch({ id: guide.id }); }}
+        onSearchUsage={(usage) => {
+          closePeripheralGuide();
+          openMcuSearch({ condition: { kind: "usage", value: usage.id, params: defaultParams(usage), min: 1 } });
+        }}
+        onPlanTemplate={(template, context) => {
+          closePeripheralGuide();
+          addPeripheralPlannerTemplate(template, context);
+        }}
+        onPlanUsage={(template, context) => {
+          closePeripheralGuide();
+          addPeripheralPlannerTemplate(template, context);
+        }}
+        plannerTypes={plannerTemplateTypes}
       />
       <Tour open={tourOpen} onClose={closeTour} />
       <PersonalCenter

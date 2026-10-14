@@ -215,7 +215,7 @@ function checkSmokeSolve(record, mcu, where) {
     /* 整组重映射的器件上，混着两个重映射组的方案在硬件上根本不存在，但
        UI 照样会把它画出来、导出照样会生成——这是最容易静默漏掉的一类错。
        模拟通道不在 AF 表里、也不受 AFIO 影响（af 恒为 null），不适用。 */
-    if (usesRemapGroups(mcu) && DEFINITIONS[type].family !== "analog") {
+    if (usesRemapGroups(mcu) && !["analog", "gpio"].includes(DEFINITIONS[type].family)) {
       const groups = new Set(group.assignments.map((item) => item.af));
       assert.equal(
         groups.size, 1,

@@ -1,8 +1,16 @@
 {
   "name": "stm32-pin-planner",
+  "productName": "MCU Pin Planner",
+  "description": "MCU 引脚规划器：按外设需求自动分配 STM32 / TI MCU 引脚",
+  "author": "Polaris",
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "main": "electron/main.mjs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Polarislos/MCU-Pin-allocation.git"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build && node tools/prepare-sites-dist.mjs",
@@ -10,13 +18,71 @@
     "mcu:catalog": "node tools/build-device-index.mjs",
     "mcu:import": "node tools/import-stm32.mjs",
     "mcu:import:ti": "node tools/import-ti.mjs",
-    "test": "node tools/build-mcu-index.mjs --check && node tests/package.mjs && node tests/verify.mjs && node tests/export.mjs && node tests/fanout.mjs && node tests/netlabels.mjs && node tests/project.mjs && node tests/render.mjs"
+    "test": "node tools/build-mcu-index.mjs --check && node tests/package.mjs && node tests/verify.mjs && node tests/export.mjs && node tests/fanout.mjs && node tests/netlabels.mjs && node tests/project.mjs && node tests/deviceSearch.mjs && node tests/usageSearch.mjs && node tests/tiPeripherals.mjs && node tests/feasibility.mjs && node tests/capabilities.mjs && node tests/searchSpec.mjs && node tests/render.mjs && node tests/peripheralGuides.mjs",
+    "app:start": "vite build && electron .",
+    "app:dist": "vite build && electron-builder --win --publish never",
+    "app:release": "vite build && electron-builder --win --publish always"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "react": "latest",
-    "react-dom": "latest"
+    "electron-updater": "6.8.9"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@vitejs/plugin-react": "6.0.5",
+    "electron": "44.7.2",
+    "electron-builder": "26.15.3",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "vite": "8.2.1"
+  },
+  "allowScripts": {
+    "electron@44.7.2": true
+  },
+  "build": {
+    "appId": "io.github.polarislos.mcu-pin-planner",
+    "productName": "MCU Pin Planner",
+    "asar": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "package.json",
+      "electron/**",
+      "dist/**",
+      "tools/vite-mcu-server.mjs",
+      "tools/lib/**",
+      "tools/data/**",
+      "src/lib/**",
+      "src/data/**",
+      "scripts/pin-planner.ico",
+      "!dist/server/**",
+      "!dist/.openai/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "scripts/pin-planner.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "MCU 引脚规划器",
+      "artifactName": "MCU-Pin-Planner-Setup-${version}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Polarislos",
+        "repo": "MCU-Pin-allocation",
+        "releaseType": "release"
+      }
+    ]
+  }
 }

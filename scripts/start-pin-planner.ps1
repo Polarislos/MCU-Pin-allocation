@@ -26,8 +26,10 @@ function Show-Problem($text) {
 }
 
 function Test-Serving {
-    try { (Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2).StatusCode -eq 200 }
-    catch { $false }
+    try {
+        $instance = Invoke-RestMethod -Uri ($url + 'api/planner-instance') -TimeoutSec 2
+        $instance.app -eq 'MCU-Planner' -and [IO.Path]::GetFullPath($instance.root).TrimEnd('\','/') -eq [IO.Path]::GetFullPath($root).TrimEnd('\','/')
+    } catch { $false }
 }
 
 if (-not (Test-Path (Join-Path $root 'package.json'))) {
@@ -52,8 +54,8 @@ if (-not $alreadyUp) {
     }
 
     Start-Process -FilePath 'cmd.exe' `
-        -ArgumentList '/c', 'title MCU Pin Planner server - close this window to stop && npm.cmd run dev' `
-        -WorkingDirectory $root -WindowStyle Minimized
+        -ArgumentList '/c', 'title MCU Pin Planner server - close this window to stop && npm.cmd run dev -- --host 127.0.0.1 --port 4173 --strictPort' `
+        -WorkingDirectory $root -WindowStyle Hidden
 
     $deadline = (Get-Date).AddSeconds(90)
     while ((Get-Date) -lt $deadline) {
@@ -63,7 +65,7 @@ if (-not $alreadyUp) {
 }
 
 if (-not (Test-Serving)) {
-    Show-Problem "服务器没能在 $url 上响应。`n`n端口 $port 可能被别的程序占用了，或者依赖没装好。`n请在工程目录里手动跑一次 npm run dev 看报什么错。"
+    Show-Problem "最新版服务器没能在 $url 上响应，或该端口正在运行其他目录的旧版本。`n`n端口 $port 可能被别的程序占用了，或者依赖没装好。`n请在工程目录里手动跑一次 npm run dev 看报什么错。"
     exit 1
 }
 

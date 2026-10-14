@@ -15,10 +15,13 @@
 - 保护 SWD/JTAG 与外部晶振引脚
 - **逐路标记 5V 电平**：只从耐 5V 的 I/O 结构里选脚，硬约束
 - **ADC / DAC 通道参与分配**：一行需求 = N 路模拟通道，由求解器挑具体通道
-- 排除物理引脚、锁定整组分配、生成多套方案
+- **普通 GPIO 参与分配**：可添加 1/2/4/8/16 路普通 GPIO，自动从可用 GPIO 中挑选
+- **已使用引脚锁定**：在引脚详情中锁定已占用 GPIO，后续生成方案会把这些脚作为硬排除条件
+- **方案引脚锁定**：生成方案后可一键锁定当前方案的全部引脚，后续重生成仍保持这些分配
+- 排除物理引脚、锁定单组分配、生成多套方案
 - **工程持久化**：自动保存到浏览器，另可导出/载入 git 友好的 `.pinplan.json`
 - **方案对比**：方案 A/B 互比，或与载入的基线工程逐信号比对
-- 导出 CSV / CubeMX `.ioc` 片段 / HAL 引脚头文件 / Markdown 评审表
+- 导出方案 CSV / **全部引脚定义 CSV** / CubeMX `.ioc` 片段 / HAL 引脚头文件 / Markdown 评审表
 - **嘉立创EDA 扩展**：导出一份 JSON，在 EDA 里选中 MCU 点一下，所有网络标签一次打完（先核对符号，不过不写；打完可一键撤销）
 - AI 工作流面板：输入模块化自然语言需求，生成可审查的接口草案，再一键应用并启动引脚求解
 - 常用模块目录：六轴 IMU、OLED、SD 卡、以太网 PHY、CAN、调试串口、USB、三相电机
@@ -85,7 +88,7 @@ npm run dev           # 或直接点桌面快捷方式
 
 | | 内容 | 体积 |
 | --- | --- | --- |
-| `src/data/deviceIndex.json` | 只有型号、系列、封装、脚数、内核 | 550 KB，gzip 33 KB，独立 chunk，点开搜索框才加载 |
+| `src/data/deviceIndex.json` | 型号、系列、封装、脚数、内核 + 外设摘要（见下节） | 约 1.2 MB，gzip 86 KB，独立 chunk，点开搜索框才加载 |
 | `/api/mcu` | 选中时现场转换引脚数据 | 单颗 20–110 KB，转换约 200–400 ms |
 | `.cache/mcus/` | 转换结果缓存，不进版本库 | 第二次选中直接命中 |
 
@@ -102,6 +105,102 @@ npm run dev           # 或直接点桌面快捷方式
 npm run mcu:import -- --part STM32F407VGT6     # 或 mcu:import:ti
 npm run mcu:index
 ```
+
+## 按外设筛选型号
+
+「选择其他型号…」里有两个输入框：上面是型号 / 系列 / 封装文本，下面是**所需外设**。
+两者和一行叠加筛选（厂商、封装形态、脚数范围）同时生效。
+
+### 刷新索引
+
+```sh
+npm run mcu:catalog
+```
+
+扫描本机的 CubeMX（`CUBEMX_DB` 或常见安装路径，与 `mcu:import` 同一套查找逻辑）和
+SysConfig（`SYSCONFIG_HOME` 或 `C:/ti/sysconfig_*` 里版本最高的），写出
+`src/data/deviceIndex.json`。不会下载任何厂商库：哪一家没找到，就在输出和索引的
+`gaps` 字段里写明，界面的说明文字也会列出来。索引里记录了每家的库版本
+（`sources[].release`）和生成时间（`peripherals.generatedAt`）；换了 CubeMX /
+SysConfig 版本后重跑一次。
+
+旧版索引（没有 `peripherals` 字段）仍能按型号搜索，外设框会提示重新生成。
+
+### 外设条件怎么写
+
+| 写法 | 含义 |
+| --- | --- |
+| `SDMMC` | 类型，严格按厂商名称：至少一个 SDMMC 实例（不含 SDIO） |
+| `SDMMC FMC` | 多个条件，默认**全部满足**，可切换为「任意一个」 |
+| `SDMMC1` | 指定实例 |
+| `SDMMC ≥ 2`、`SDMMC×2` | 至少两个实例；标签上的 −/+ 也能调 |
+| `SD卡`、`外部存储`、`CAN总线` | 分组：跨名称的同类外设（SDMMC 或 SDIO；FMC 或 FSMC），结果里保留实际名称 |
+| `USB HS`、`内置PHY`、`USB主机`、`Chrom-ART`、`MIPI CSI-2` | 能力目录里的条目，点「按能力浏览…」可以看全表 |
+| `SD 4位`、`SDRAM 32位`、`NAND`、`8080`、`RMII`、`RGB565` | 用途：检查本封装是否引出了这种接法需要的全部信号 |
+
+不区分大小写，支持中文。拼错的名字不会被悄悄当成别的，界面会给出候选（`SDMCC` →
+SDMMC）。
+
+### 规格筛选与详情
+
+左侧可以叠加 `Flash ≥ KB`、`RAM ≥ KB` 和 `主频 ≥ MHz` 下限；选中型号后，详情还会
+显示 CubeMX 数据库记录的供电范围。规格按对应的 CubeMX RefName XML 生成；一个文件
+包含多个容量变体时，会按 RefName 展开顺序逐个映射（例如 H743 的 G/I 容量档），不把
+第一个容量套给整组型号。RAM 阈值只使用 CubeMX 的 `Ram` 字段，单列的 `CCMRam` 在
+详情中单独显示，不并入阈值。
+
+当前 TI SysConfig 1.28.0 器件目录没有 Flash、RAM 和 MCU 主频数值字段，因此 TI 在这些
+规格筛选下会作为“规格未知”排除，并在结果说明中计数；这不表示 TI 型号不具备这些资源。
+STM32 的个别记录也可能缺主频或电压字段。详情里的“未收录”表示本机数据源没有该值，
+不是 0。规格值可从详情中的工具版本和 RefName 文件名追溯。
+
+### 结果怎么读
+
+每条结果是厂商库里的一条（型号, 封装）记录。型号里的 `x` 是厂商库的等级占位符，
+原样保留，不是完整订货型号。匹配到的外设写成 `SDMMC ×2：SDMMC1(14) SDMMC2(10)`，
+括号里是**该封装引出的信号数**；CORDIC、HASH、RNG 这类内部功能本来就没有外部
+引脚，显示 0 是正常的。点击条目即「用于引脚规划」，走与下拉切换相同的加载流程。
+
+结论分四层，越往下越强，界面上分开表述：
+
+1. **记录包含该外设**：类型、实例、分组、能力条件。
+2. **封装引出了哪些信号**：括号里的信号数，悬停能力条目可看依据。
+3. **具体用途信号齐全**：用途条件。有 FMC 不等于能接 SDRAM（H743 的 LQFP100 就
+   没有 SDCLK / BA0 / A0–A15）；有 SDMMC 不等于支持 8 位总线。缺信号的型号可以
+   单独查看缺哪些。
+4. **多个接口能同时无冲突分配**：结果行的「检查组合」把条件交给引脚求解器，在完整
+   引脚表上一起求解（默认保留调试脚和晶振脚，可叠加当前工程的接口需求）。只有穷举
+   完毕才说「确认无法」；没跑完的如实说「未找到」。
+
+每颗器件对每个条件只有三种结论：**确定满足、确定不满足、数据未知**。数据未知的
+型号不会混进「不满足」，结果说明里会单独计数，并能单独列出来看是哪个条件未知。
+
+### 覆盖范围与已知缺口
+
+- **STM32**：外设来自 CubeMX `db/mcu/<RefName>.xml` 的 `<IP>` 记录（按封装分文件），
+  信号来自同一文件的 `<Pin><Signal>`。FatFS、FreeRTOS、USB_DEVICE 这类软件组件和
+  RCC、GPIO、NVIC 等系统模块不算外设。
+- **TI**：来自 SysConfig 器件族数据的外设与接口类型；族数据按型号列了外设时按型号
+  区分（TM4C1231 没有 USB）。外设只在本封装至少引出一个脚时收录。用途检查（SD 4 位、
+  SDRAM…）目前只覆盖 STM32，TI 器件对这类条件是「数据未知」。
+- **能力目录**（`src/lib/capabilities.js`）按厂商分别映射，只收数据里核实过的名称：
+  - USB 拆成四项：FS 控制器、HS 控制器、OTG、主机模式，外加**内置 HS PHY**。
+    片上 PHY 的依据是 CubeMX 里 OTG_HS 时钟使能带 `USBPHYC`（U59x/U5Ax/U5Fx/U5Gx、
+    H7R/S）或封装有 `REXTPHYHS` 脚（F723/F733）；有 HS 控制器但没有这两种痕迹的
+    记为数据未知。主机模式：OTG、DRD 可以，`usb1_*` 版本的 USB 仅设备，H5/U0 的 USB
+    数据里看不出来。
+  - 市场名称只收官方与 IP 名并列写出的：Chrom-ART = DMA2D，NeoChrom = GPU2D。
+  - **未收录**：MIPI CSI-2、ISP、H.264 编码器、Neural-ART NPU 在 ST 侧只有
+    STM32N6 有，而本机 CubeMX 库没有 N6 系列；ISP、H.264 在 TI 数据里也没有可核实
+    的对应。这些条件对相应厂商的器件一律是「数据未知」，不是「不支持」。
+  - TI 的 `CAN` 接口类型没区分经典 CAN 与 CAN FD；TI 的 USB 没写速率与角色，
+    USB FS/HS/OTG/主机对 TI 均为数据未知。
+
+相关代码：索引生成 `tools/build-device-index.mjs`，筛选 `src/lib/deviceSearch.js`
+（与界面无关，可单测），用途 `src/lib/peripheralUsage.js`，能力 `src/lib/capabilities.js`，
+组合可行性 `src/lib/feasibility.js`。对应测试 `tests/deviceSearch.mjs`、
+`usageSearch.mjs`、`tiPeripherals.mjs`、`capabilities.mjs`、`feasibility.mjs`、
+`searchSpec.mjs`，都用仓库里提交的索引，对照本机厂商库核对过的已知型号。
 
 ## 扩展边界
 
@@ -324,13 +423,14 @@ INN 是差分负端，必须与 INP 配对使用，不能独立当一路模拟�
 
 - **改需求行**（增删、换变体、换实例、换方位）→ 不自动重跑。用户往往要连改几行，
   每改一次都跑一遍既慢又干扰。改完点"生成方案"，期间按钮和封装图标记为已过期。
-- **对已有结果的单击微调**（排除引脚、锁定/解锁整组）→ 立即重跑，即时反馈。
+- **对已有结果的单击微调**（锁定已使用引脚、锁定/解锁单组或当前方案全部引脚）→ 立即重跑，即时反馈。
 
 ## 导出
 
 | 格式 | 用途 |
 | --- | --- |
-| CSV | 带 BOM，Excel 直接打开不乱码 |
+| 方案 CSV | 当前生成方案的信号、物理脚、实例和 AF |
+| 全部引脚定义 CSV | 当前 MCU 每一颗引脚的完整定义、复用功能、电气属性和保护信息 |
 | CubeMX `.ioc` 片段 | 合并进已有 `.ioc` 后用 CubeMX 打开，接着配时钟树 / DMA / NVIC |
 | HAL 引脚头文件 | `#define SPI1_SCK_Pin` / `_GPIO_Port` / `_AF`，直接进工程 |
 | Markdown | 贴进硬件评审文档 |
@@ -455,6 +555,43 @@ GPIO 里 35 个逐条一致，2 处差异经查库确认是手工版漏了），
 
 ## 运行
 
+### 桌面版（推荐）
+
+到 [Releases](https://github.com/Polarislos/MCU-Pin-allocation/releases) 下载
+`MCU-Pin-Planner-Setup-<版本>.exe` 安装即可，不需要装 Node.js。
+
+- 按需器件仍然读本机装的 CubeMX / SysConfig 库（查找规则同下文"从 CubeMX 库导入"，
+  也认 `CUBEMX_DB` / `SYSCONFIG_HOME` 环境变量）。厂商库有自己的许可，不随安装包分发。
+- 转换缓存在 `%APPDATA%\MCU Pin Planner\mcu-cache\`。
+- **更新**：启动后会检查 GitHub 上的最新 Release，有新版本时弹窗询问；
+  个人中心 → 软件更新 也能手动检查、看进度、重启安装。不点"立即重启"的话，
+  下次退出应用时自动安装。
+- 安装包没有代码签名，首次运行 Windows SmartScreen 会提示"未知发布者"，点"仍要运行"。
+
+桌面版的结构：`electron/main.mjs` 在 127.0.0.1 的随机端口起一个 http 服务
+（`dist/` 静态文件 + `tools/vite-mcu-server.mjs` 的同一个 `/api/mcu` 中间件），窗口加载它；
+`electron/preload.cjs` 只向页面暴露 `window.appUpdater`。
+
+本地调试与打包：
+
+```powershell
+npm.cmd run app:start   # 构建页面后用 Electron 打开（不检查更新）
+npm.cmd run app:dist    # 生成 release\MCU-Pin-Planner-Setup-<版本>.exe，不上传
+```
+
+### 发布新版本
+
+```powershell
+npm.cmd version patch          # 或 minor / major：改 package.json 并打 v<版本> 标签
+git push origin main --follow-tags
+```
+
+推送标签后 `.github/workflows/release.yml` 在 Windows 上跑 `npm test`、打包，
+把安装包、`.blockmap` 和 `latest.yml` 传到同名 Release。已安装的客户端就是读这个
+`latest.yml` 判断有没有新版本的，所以 Release 不要设成草稿，文件也不要改名。
+
+### 浏览器版
+
 日常使用点桌面上的 **MCU 引脚规划器** 快捷方式即可：它会起本地服务器（已经在跑就直接复用），
 再用默认浏览器打开 <http://127.0.0.1:4173/>。服务器窗口最小化在任务栏，关掉它就停。
 
@@ -518,3 +655,17 @@ npm.cmd run build
 - **`alternateSummary` 与 `functions` 有 52 处不一致**，其中 PC2/PC3 等的
   `alternateSummary` 是空数组，说明 PDF 提取有缺口。`functions` 才是实际被使用的
   字段所以不影响功能，但缺一条自校验把提取错误暴露出来。
+
+## 外设介绍
+
+在「选择其他型号… → 按能力浏览…」的能力旁点击 ⓘ，或在左侧外设列表点击 ⓘ、右侧检视面板点击「了解这个外设」，打开统一介绍面板。介绍覆盖能力目录中的特殊外设，包括内部计算与安全功能。
+
+面板包含通用用途、连接与信号类别、选型注意事项、当前规划器件的引脚数据线索及 ST 官方参考资料。当前引脚表没有对应信号不代表外设不存在，尤其内部功能没有外部引脚。通用介绍不证明目标型号具备全部能力。
+
+点击「查找带此外设的 MCU」会加入能力筛选并展开搜索，不切换器件或修改工程需求。内容离线保存于 `src/data/peripheralGuides/index.js`，通过能力 ID 关联。新增能力需补齐介绍；内部功能必须明确无专属外部引脚。
+
+### 外设对比、接法图和封装用途检查
+
+第二阶段在介绍面板中加入常见外设对比、数据/控制关系示意图，以及复用 `src/lib/peripheralUsage.js` 的当前封装检查。已有规则覆盖 SD 总线、FMC SDRAM/SRAM/NOR/NAND、8080 屏、QSPI Flash、以太网 RMII/MII、DCMI 摄像头和 LTDC RGB 屏。介绍页可以从具体接法直接进入对应用途筛选。
+
+用途检查只验证同一外设实例是否具有规则要求的信号候选；它不分配具体引脚，也不检查这些信号与其他接口的冲突。当前用途规则仅覆盖 STM32 CubeMX 信号命名；TI 或规则未覆盖的能力应显示未知，不能推断为不支持。连接图是概念关系示意，不是原理图或引脚图。

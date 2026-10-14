@@ -132,6 +132,7 @@ export function parseProject(text) {
 /* af 为 null = 模拟通道，它在 additionalFunctions 里；否则要在 AF 表里
    找到同名同编号的条目。 */
 function pinProvides(pin, item) {
+  if (/^GPIO\d+$/.test(item.function || "")) return pin.kind === "gpio";
   if (item.af == null) return (pin.additionalFunctions || []).includes(item.function);
   return pin.functions.some((entry) => entry.name === item.function && entry.af === item.af);
 }

@@ -185,7 +185,7 @@ const PROFILE_CONFIGS = {
     categoryOrder: GENERIC_CATEGORY_ORDER,
   },
   "stm32-cube": {
-    requestTypes: ["SPI", "I2C", "UART", "FDCAN", "SDMMC", "QUADSPI", "USB", "ETH", "TIM", "ADC", "DAC"],
+    requestTypes: ["SPI", "I2C", "UART", "FDCAN", "SDMMC", "QUADSPI", "USB", "ETH", "TIM", "ADC", "DAC", "GPIO"],
     categoryOrder: [
       "System Core", "Analog", "Timers", "Connectivity", "Multimedia", "Security", "Computing",
       "Middleware and Software Packs", "Trace and Debug", "Power and Thermal",
@@ -194,7 +194,7 @@ const PROFILE_CONFIGS = {
     staticGroups: STATIC_GROUPS,
   },
   "ti-mspm0": {
-    requestTypes: ["SPI", "I2C", "UART", "FDCAN", "TIM", "ADC", "DAC"],
+    requestTypes: ["SPI", "I2C", "UART", "FDCAN", "TIM", "ADC", "DAC", "GPIO"],
     sections: [
       { id: "project-configuration", label: "PROJECT CONFIGURATION", count: 1, items: MSPM0_STATIC.project },
       { id: "mspm0-driver-library", label: "MSPM0 DRIVER LIBRARY", count: 10, items: MSPM0_STATIC.driver },
@@ -221,7 +221,11 @@ export function getMcuUiProfile(profileId) {
 export function requestTypesFor(mcu, profileId) {
   const profile = getMcuUiProfile(profileId);
   const declared = profile.requestTypes || PERIPHERAL_TYPE_ORDER;
-  const available = declared.filter((type) => instancesForType(mcu, type).length > 0);
+  const available = declared.filter((type) => (
+    type === "GPIO"
+      ? mcu.pins.some((pin) => pin.kind === "gpio")
+      : instancesForType(mcu, type).length > 0
+  ));
   return available.length ? available : declared;
 }
 

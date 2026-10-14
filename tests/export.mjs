@@ -4,7 +4,7 @@
 */
 import assert from "node:assert/strict";
 import { allocatePins } from "../src/lib/allocator.js";
-import { EXPORT_FORMATS, toCsv, toHeader, toIoc, toMarkdown, toNetLabels } from "../src/lib/export.js";
+import { EXPORT_FORMATS, toCsv, toHeader, toIoc, toMarkdown, toNetLabels, toPinDefinitionsCsv } from "../src/lib/export.js";
 import { ensureMcuLoaded } from "../src/lib/mcuCatalog.js";
 
 const mcu = await ensureMcuLoaded("st-stm32h743vit6-lqfp100");
@@ -28,6 +28,15 @@ assert.ok(csv.startsWith("﻿"), "CSV 需要 BOM，否则 Excel 打开中文会�
 const csvLines = csv.split("\r\n");
 assert.equal(csvLines.length, expectedPins + 1, "CSV 行数 = 表头 + 每脚一行");
 assert.ok(csvLines.every((line) => (line.match(/"/g) || []).length === 18), "CSV 每行 9 个带引号字段");
+
+/* ---------- 完整引脚定义 CSV ---------- */
+const pinDefinitionsCsv = toPinDefinitionsCsv(mcu);
+assert.ok(pinDefinitionsCsv.startsWith("﻿"), "完整引脚 CSV 需要 BOM，否则 Excel 打开中文会乱码");
+const pinDefinitionLines = pinDefinitionsCsv.split("\r\n");
+assert.equal(pinDefinitionLines.length, mcu.pins.length + 1, "完整引脚 CSV 应包含表头和每颗引脚一行");
+assert.ok(pinDefinitionLines.every((line) => (line.match(/"/g) || []).length === 24), "完整引脚 CSV 每行应有 12 个字段");
+assert.ok(pinDefinitionsCsv.includes('"PE2"'), "完整引脚 CSV 缺少引脚名");
+assert.ok(pinDefinitionsCsv.includes("TRACECLK (AF0)"), "完整引脚 CSV 缺少 AF 复用定义");
 
 /* ---------- CubeMX .ioc ---------- */
 const ioc = toIoc(mcu, solution);

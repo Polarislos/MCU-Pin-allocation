@@ -21,6 +21,7 @@
   --eth: #15803d;
   --timer: #ca8a04;
   --analog: #c2410c;
+  --gpio: #475569;
   --protected: #5b7089;
   --ok: #15803d;
   --danger: #dc2626;
@@ -80,6 +81,10 @@ button:focus-visible, input:focus-visible {
 
 .app-header > div:first-child { display: flex; align-items: baseline; gap: 16px; }
 .app-header h1 { margin: 0; font-size: 21px; letter-spacing: -0.02em; }
+.app-primary-nav { display: flex; align-self: center; align-items: center; gap: 4px; margin-left: 8px; }
+.app-primary-nav button { min-height: 30px; padding: 0 10px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; }
+.app-primary-nav button:hover { border-color: var(--line); background: var(--panel); color: var(--ink); }
+.app-primary-nav button.is-active { border-color: color-mix(in srgb, var(--accent) 25%, var(--line)); background: color-mix(in srgb, var(--accent) 8%, var(--panel-strong)); color: var(--accent); font-weight: 700; }
 .product-kicker, .source-badge span, .pinout-toolbar span {
   font-family: "Cascadia Mono", Consolas, monospace;
   font-size: 10px;
@@ -351,6 +356,7 @@ button:focus-visible, input:focus-visible {
 .legend-sdmmc { background: var(--sdmmc); } .legend-quadspi { background: var(--quadspi); }
 .legend-usb { background: var(--usb); } .legend-eth { background: var(--eth); }
 .legend-timer { background: var(--timer); } .legend-analog { background: var(--analog); }
+.legend-gpio { background: var(--gpio); }
 
 /* 接口需求列表：一行 = 一路接口 */
 .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
@@ -377,6 +383,9 @@ button:focus-visible, input:focus-visible {
 .request-sdmmc { border-left-color: var(--sdmmc); } .request-quadspi { border-left-color: var(--quadspi); }
 .request-usb { border-left-color: var(--usb); } .request-eth { border-left-color: var(--eth); }
 .request-timer { border-left-color: var(--timer); } .request-analog { border-left-color: var(--analog); }
+.request-gpio { border-left-color: var(--gpio); }
+.request-field-note { display: flex; flex-direction: column; justify-content: center; gap: 3px; min-width: 0; padding: 0 6px; border: 1px dashed var(--line); border-radius: 6px; background: var(--panel); }
+.request-field-note small { color: var(--muted); font-size: 10px; line-height: 1.25; }
 
 /* 5V 电平是硬约束，用勾选框而不是下拉——它是"是/否"，不是"选一个"。 */
 .request-flag .request-flag-box { display: flex; align-items: center; gap: 5px; height: 28px; padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
@@ -393,6 +402,8 @@ button:focus-visible, input:focus-visible {
 
 .pinout-panel { min-width: 0; overflow: auto; padding: 18px 22px 30px; }
 .pinout-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.pinout-toolbar-actions { display: flex; align-items: center; gap: 8px; }
+.pinout-export-button { min-height: 36px; }
 .pinout-toolbar > div span, .pinout-toolbar > div strong { display: block; }
 .pinout-toolbar > div strong { margin-top: 3px; font: 12px "Cascadia Mono", Consolas, monospace; }
 .pinout-toolbar input { width: 280px; height: 36px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel-strong); color: var(--ink); }
@@ -521,6 +532,7 @@ button:focus-visible, input:focus-visible {
 .pin-sdmmc { --tone: var(--sdmmc); } .pin-quadspi { --tone: var(--quadspi); }
 .pin-usb { --tone: var(--usb); } .pin-eth { --tone: var(--eth); }
 .pin-timer { --tone: var(--timer); } .pin-analog { --tone: var(--analog); }
+.pin-gpio { --tone: var(--gpio); }
 .pin.is-assigned {
   background: color-mix(in srgb, var(--tone) 26%, var(--panel-strong));
   border-color: var(--tone);
@@ -610,6 +622,8 @@ button:focus-visible, input:focus-visible {
 .solution-tabs button.active { background: var(--accent); color: var(--accent-ink); }
 .text-button { color: var(--accent); padding: 3px; font-size: 11px; white-space: nowrap; }
 .text-button:hover { text-decoration: underline; }
+.solution-lock-all { margin-left: auto; }
+.solution-lock-all.is-locked { color: var(--danger); }
 .solver-meta { color: var(--muted); font-size: 10px; line-height: 1.5; }
 .solution-groups { display: grid; gap: 9px; }
 .solution-group { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-strong); overflow: hidden; }
@@ -707,6 +721,24 @@ button:focus-visible, input:focus-visible {
 .mcu-browser-list strong { font-size: 12px; font-weight: 650; }
 .mcu-browser-list span { color: var(--muted); font-size: 11px; }
 .mcu-browser-list em { grid-column: 1 / -1; color: var(--muted); font-size: 10px; font-style: normal; }
+.mcu-browser { width: min(420px, calc(100vw - 32px)); }
+.mcu-browser > input + .mcu-peripheral-input { margin-top: 6px; }
+.mcu-peripheral-input { position: relative; }
+.mcu-suggestions { position: absolute; top: 100%; left: 0; right: 0; z-index: 2; max-height: 240px; margin: 2px 0 0; padding: 4px; overflow-y: auto; list-style: none; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel-strong); box-shadow: 0 8px 20px rgb(0 0 0 / 24%); }
+.mcu-suggestions button { display: flex; justify-content: space-between; gap: 8px; width: 100%; padding: 5px 7px; border: 0; border-radius: 4px; background: none; color: var(--ink); text-align: left; cursor: pointer; }
+.mcu-suggestions button:hover { background: var(--panel); }
+.mcu-suggestions strong { font-size: 12px; font-weight: 650; }
+.mcu-suggestions span { color: var(--muted); font-size: 11px; }
+.mcu-conditions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; }
+.mcu-condition { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel); color: var(--ink); font-size: 11px; }
+.mcu-condition button, .mcu-condition-mode button, .mcu-pager button { border: 0; background: none; color: var(--muted); font-size: 11px; cursor: pointer; padding: 0 3px; }
+.mcu-condition button:disabled, .mcu-pager button:disabled { opacity: 0.4; cursor: default; }
+.mcu-condition-count { display: inline-flex; align-items: center; color: var(--muted); }
+.mcu-condition-mode { display: inline-flex; margin-left: auto; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
+.mcu-condition-mode button { padding: 2px 7px; }
+.mcu-condition-mode button[aria-pressed="true"] { background: var(--accent); color: var(--panel-strong); }
+.mcu-browser-list em.mcu-hit { color: var(--accent); }
+.mcu-pager { display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 6px; color: var(--muted); font-size: 11px; }
 
 /*
   Visual refresh: a calm technical-instrument language for the dense planner.
@@ -1124,6 +1156,13 @@ body {
 .storage-list button:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
 .storage-list button:disabled { opacity: 0.45; cursor: default; }
 
+/* 软件更新（只在桌面版的个人中心里出现） */
+.update-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.update-actions button { height: 26px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--panel); color: var(--ink); font-size: 11px; cursor: pointer; }
+.update-actions button:disabled { opacity: 0.45; cursor: default; }
+.update-progress { display: block; width: 100%; height: 6px; margin: 4px 0 8px; }
+.update-notes { max-height: 160px; overflow: auto; margin: 4px 0 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--field-bg); color: var(--muted); font-family: inherit; font-size: 11px; line-height: 1.6; white-space: pre-wrap; }
+
 /* 外设条目：名称（检视）+ 右侧的加入需求开关。原来整行就是一个按钮，
    现在拆成一行两个，用 grid 让名称占满剩余宽度。 */
 .peripheral-item-row { display: grid; grid-template-columns: 1fr auto; align-items: stretch; gap: 4px; }
@@ -1169,3 +1208,427 @@ body {
   max-height: none;
   height: auto;
 }
+.mcu-condition select { height: 20px; padding: 0 2px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--panel-strong); color: var(--ink); font-size: 11px; }
+.mcu-browser-list em.mcu-hit.is-missing { color: var(--warn); }
+.mcu-browser-note .linklike { font-size: 11px; }
+.mcu-browser-list li.has-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 4px; }
+.mcu-browser-list button.mcu-check { width: auto; margin-top: 4px; padding: 2px 7px; border: 1px solid var(--line-strong); border-radius: 5px; color: var(--accent); font-size: 11px; white-space: nowrap; }
+.mcu-browser-list button.mcu-check:disabled { opacity: 0.5; cursor: default; }
+.mcu-result-actions { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 4px 0; }
+.mcu-browser-list .mcu-result-actions button { width: auto; min-height: 26px; margin: 0; padding: 3px 6px; border: 1px solid var(--line-strong); border-radius: 5px; color: var(--accent); font-size: 10px; line-height: 1.25; white-space: nowrap; text-align: center; }
+.mcu-browser-list .mcu-result-actions button[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel-strong)); }
+.mcu-browser-list .mcu-result-actions button:disabled { opacity: .45; cursor: not-allowed; }
+.mcu-browser-list em.mcu-feasibility { color: var(--muted); }
+.mcu-browser-list em.mcu-feasibility.is-ok { color: var(--accent); }
+.mcu-browser-list em.mcu-feasibility.is-bad { color: var(--danger); }
+.mcu-browser-list em.mcu-feasibility.is-warn { color: var(--warn); }
+.mcu-feasibility-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 6px; font-size: 11px; }
+.mcu-feasibility-bar .secondary-button { padding: 3px 8px; font-size: 11px; }
+.mcu-catalog-toggle { margin-top: 6px; }
+.mcu-capabilities { max-height: 320px; margin-top: 6px; overflow-y: auto; }
+.mcu-capabilities h4 { margin: 8px 0 4px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.mcu-capabilities section > div { display: flex; flex-wrap: wrap; gap: 4px; }
+.mcu-capability { display: inline-flex; align-items: baseline; gap: 5px; padding: 2px 7px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel); color: var(--ink); font-size: 11px; cursor: pointer; }
+.mcu-capability:hover { border-color: var(--accent); }
+.mcu-capability strong { font-weight: 650; }
+.mcu-capability span { color: var(--muted); font-size: 10px; }
+.mcu-capability span.is-missing { color: var(--warn); }
+.mcu-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; }
+.mcu-filters select, .mcu-filters input { height: 26px; padding: 0 5px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--panel); color: var(--ink); font-size: 11px; }
+.mcu-filters select[aria-label="芯片家族"] { flex: 1 1 150px; min-width: 0; }
+.mcu-filters input { width: 64px; }
+.mcu-similar { margin-left: 4px; }
+.mcu-browser-list em.mcu-hit.is-unknown { color: var(--warn); }
+.mcu-browser-list em.mcu-use { color: var(--muted); font-size: 10px; }
+.mcu-browser-list button:hover em.mcu-use, .mcu-browser-list button:focus-visible em.mcu-use { color: var(--accent); }
+.mcu-browser-groups { max-height: 300px; margin-top: 6px; overflow-y: auto; }
+.mcu-family-group { padding: 0 0 5px; border-bottom: 1px solid var(--line); }
+.mcu-family-group > summary { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 7px 4px 5px; color: var(--ink); cursor: pointer; list-style: none; }
+.mcu-family-group > summary::-webkit-details-marker { display: none; }
+.mcu-family-group > summary::before { content: "▸"; color: var(--accent); font-size: 11px; }
+.mcu-family-group[open] > summary::before { content: "▾"; }
+.mcu-family-group > summary strong { margin-right: auto; font-size: 12px; }
+.mcu-family-group > summary span { color: var(--muted); font-size: 10px; text-align: right; }
+.mcu-series-group { margin-left: 8px; }
+.mcu-series-group > summary { padding: 10px 12px; cursor: pointer; color: var(--ink); font-size: 12px; border-bottom: 1px solid var(--line); }
+.mcu-series-group > summary span { margin-left: 12px; color: var(--muted); font-size: 11px; }
+.mcu-series-group[open] > summary { background: var(--panel); color: var(--accent); }
+.mcu-series-group h5 { display: flex; justify-content: space-between; gap: 8px; margin: 3px 4px 1px; color: var(--muted); font-size: 10px; font-weight: 600; }
+.mcu-series-group h5 small { font-size: 10px; font-weight: 400; }
+.mcu-browser-groups .mcu-browser-list { max-height: none; margin-top: 0; overflow: visible; }
+/* 选择器浮层里的开关用紧凑尺寸，和外设条件标签同一档 */
+.mcu-feasibility-bar .toggle-row { gap: 5px; min-height: 0; padding: 0; font-size: 11px; }
+.mcu-feasibility-bar .toggle-track { transform: scale(0.7); transform-origin: left center; margin-right: -8px; }
+.mcu-feasibility-bar .secondary-button { min-height: 0; height: 24px; padding: 0 8px; border-radius: 5px; font-size: 11px; }
+
+/* 外设介绍：原生模态对话框保留键盘焦点与 Escape 关闭。 */
+.guide-capability-row { display: flex; align-items: center; gap: 4px; }
+.guide-info { flex: 0 0 auto; padding: 5px 8px; border: 1px solid #7695bb55; border-radius: 8px; background: transparent; color: inherit; cursor: pointer; }
+.guide-info:hover { background: #5485d522; }
+.guide-inline { padding: 10px 0; border-bottom: 1px solid #7695bb44; }
+.peripheral-guide-dialog { margin: 0 0 0 auto; height: 100dvh; max-height: 100dvh; width: min(540px, 100vw); max-width: 100vw; border: 0; padding: 0; background: #f8fbff; color: #18324b; box-shadow: -12px 0 60px #0003; }
+.peripheral-guide-dialog::backdrop { background: #10203066; }
+.peripheral-guide-content { padding: 26px; line-height: 1.75; }
+.peripheral-guide-content header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.peripheral-guide-content h2 { margin: 4px 0 20px; }
+.peripheral-guide-content h3 { font-size: 15px; margin: 22px 0 6px; }
+.peripheral-guide-content p { margin: 8px 0; }
+.guide-summary { font-size: 18px; }
+.guide-device { padding: 16px; margin: 22px 0; border: 1px solid #7695bb55; border-radius: 12px; }
+.guide-device h3 { margin-top: 0; }
+.guide-comparisons > article, .guide-use-cases > article { padding: 14px; margin: 12px 0; border: 1px solid #7695bb44; border-radius: 12px; }
+.guide-comparisons > article > div { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.guide-comparisons > article p { padding: 10px; border-radius: 8px; background: #5485d20d; }
+.guide-use-cases h4 { margin: 0 0 8px; }
+.guide-diagram { margin: 10px 0; }
+.guide-diagram figcaption { font-size: 12px; color: #7c8da2; margin-bottom: 8px; }
+.guide-diagram > div { display: flex; align-items: center; justify-content: space-between; gap: 5px; }
+.guide-diagram-step { display: contents; }
+.guide-diagram-box { flex: 1 1 0; min-width: 0; padding: 10px 7px; border: 1px solid #5a89c766; border-radius: 9px; text-align: center; font-size: 12px; line-height: 1.35; }
+.guide-diagram-arrow { color: #4a82ce; }
+.guide-diagram > small { display: block; margin-top: 6px; color: #8190a1; }
+.guide-check-ok { color: #23844c; }
+.guide-check-missing { color: #b76d16; }
+.guide-coverage-note { padding: 10px; border-radius: 8px; background: #5485d20d; font-size: 12px; }
+.peripheral-guide-content footer { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin: 20px 0; }
+.peripheral-guide-content a { color: #2766cb; }
+[data-theme="dark"] .peripheral-guide-dialog { background: #142235; color: #e0eafa; }
+[data-theme="dark"] .peripheral-guide-content a { color: #8eb9ff; }
+[data-theme="dark"] .guide-comparisons > article p { background: #80aff014; }
+@media (max-width: 600px) { .peripheral-guide-content { padding: 20px; } }
+
+/* Full-page MCU selection shares the planner's color tokens and compact engineering UI. */
+.peripheral-directory-page {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  grid-template-rows: 72px minmax(0, 1fr);
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+}
+.peripheral-directory-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--panel-strong);
+  box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--accent) 72%, transparent);
+}
+.peripheral-directory-header > div { text-align: left; }
+.peripheral-directory-header > button { justify-self: start; width: auto; }
+.peripheral-directory-header > div small { color: var(--accent); font: 700 9px/1.4 "Cascadia Mono", Consolas, monospace; letter-spacing: .16em; }
+.peripheral-directory-header h1 { margin: 0; color: var(--ink); font-size: 19px; }
+.peripheral-directory-header > span { justify-self: end; color: var(--muted); font-size: 11px; }
+.peripheral-directory-layout { display: grid; grid-template-columns: 170px 300px minmax(0, 1fr); min-height: 0; overflow: hidden; }
+.peripheral-directory-categories, .peripheral-directory-results, .peripheral-directory-detail-pane { min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.peripheral-directory-categories { padding: 18px 13px; border-right: 1px solid var(--line); background: var(--panel); }
+.peripheral-directory-categories > div { display: flex; align-items: baseline; justify-content: space-between; margin: 0 5px 12px; }
+.peripheral-directory-categories > div strong { color: var(--ink); font-size: 14px; }
+.peripheral-directory-categories > div span, .peripheral-directory-categories button small { color: var(--muted); font-size: 10px; }
+.peripheral-directory-categories > button { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 38px; margin: 2px 0; padding: 0 9px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--ink); font-size: 11px; text-align: left; cursor: pointer; }
+.peripheral-directory-categories > button:hover { background: var(--panel-strong); }
+.peripheral-directory-categories > button.is-active { border-color: color-mix(in srgb, var(--accent) 24%, var(--line)); background: color-mix(in srgb, var(--accent) 8%, var(--panel-strong)); color: var(--accent); font-weight: 700; }
+.peripheral-directory-categories > p { margin: 20px 5px 0; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; line-height: 1.65; }
+.peripheral-directory-results { padding: 16px 12px 24px; }
+.peripheral-directory-searchbar { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; margin-bottom: 13px; padding-bottom: 10px; background: var(--bg); }
+.peripheral-directory-searchbar label { color: var(--ink); font-size: 12px; font-weight: 700; }
+.peripheral-directory-searchbar > span { color: var(--muted); font-size: 10px; }
+.peripheral-directory-searchbar input { grid-column: 1 / -1; width: 100%; height: 38px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel-strong); color: var(--ink); font-size: 12px; }
+.peripheral-directory-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.peripheral-directory-card { display: grid; align-content: center; gap: 4px; min-width: 0; min-height: 68px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel-strong); color: var(--ink); text-align: left; cursor: pointer; transition: border-color 130ms ease, background 130ms ease; }
+.peripheral-directory-card:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+.peripheral-directory-card.is-selected { border-color: color-mix(in srgb, var(--accent) 65%, var(--line)); background: color-mix(in srgb, var(--accent) 5%, var(--panel-strong)); box-shadow: inset 3px 0 var(--accent); }
+.peripheral-directory-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.peripheral-directory-card-heading strong { font-size: 13px; }
+.peripheral-directory-card-heading small { flex: 0 0 auto; padding: 3px 6px; border-radius: 99px; background: var(--panel); color: var(--muted); font-size: 9px; }
+.peripheral-directory-card-summary { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.peripheral-directory-card-uses { color: var(--muted); font-size: 10px; line-height: 1.5; }
+.peripheral-directory-detail-pane { border-left: 1px solid var(--line); background: var(--panel); }
+.peripheral-directory-details { width: 100%; max-width: 1040px; margin: 0 auto; padding: 28px 36px 40px; }
+.peripheral-directory-detail-eyebrow { color: var(--accent); font-size: 10px; font-weight: 700; letter-spacing: .05em; }
+.peripheral-directory-details > h2 { margin: 6px 0 14px; color: var(--ink); font-size: 28px; overflow-wrap: anywhere; }
+.peripheral-directory-lead { margin: 0 0 17px; padding: 11px; border: 1px solid color-mix(in srgb, var(--accent) 23%, var(--line)); border-radius: 8px; background: color-mix(in srgb, var(--accent) 5%, var(--panel-strong)); color: var(--ink); font-size: 12px; line-height: 1.65; }
+.peripheral-directory-current-mcu { margin: 12px 0; padding: 10px; border: 1px solid var(--line); border-left: 3px solid var(--line-strong); border-radius: 8px; background: var(--panel-strong); }
+.peripheral-directory-current-mcu.is-listed { border-left-color: #278456; }
+.peripheral-directory-current-mcu.is-not-listed { border-left-color: #b8791b; }
+.peripheral-directory-current-mcu.is-unknown { border-left-color: var(--muted); }
+.peripheral-directory-current-mcu > div { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.peripheral-directory-current-mcu h3 { margin: 0; color: var(--ink); font-size: 11px; }
+.peripheral-directory-current-mcu span { color: var(--muted); font-size: 9px; }
+.peripheral-directory-current-mcu p { margin: 6px 0 0; color: var(--ink); font-size: 10px; line-height: 1.6; }
+.peripheral-directory-current-mcu small { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; line-height: 1.5; }
+.peripheral-directory-details > section { margin-top: 15px; }
+.peripheral-directory-details h3 { margin: 0 0 6px; color: var(--ink); font-size: 12px; }
+.peripheral-directory-details section > p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.7; }
+.peripheral-directory-details section > small { display: block; margin-top: 6px; color: var(--muted); font-size: 9px; line-height: 1.6; }
+.peripheral-modes { margin-top: 15px; }
+.peripheral-modes > h3 { margin: 0 0 6px; color: var(--ink); font-size: 12px; }
+.peripheral-modes-intro, .peripheral-modes-caveat, .peripheral-modes-empty { margin: 0 0 8px; color: var(--muted); font-size: 10px; line-height: 1.65; }
+.peripheral-modes-caveat { margin-top: 8px; padding: 8px; border-left: 2px solid var(--warn, #c58117); border-radius: 0 6px 6px 0; background: color-mix(in srgb, var(--warn, #c58117) 7%, var(--panel-strong)); }
+.peripheral-modes-dimensions { display: grid; gap: 8px; }
+.peripheral-mode-dimension { min-width: 0; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-strong); }
+.peripheral-mode-dimension > header { display: grid; gap: 3px; margin-bottom: 6px; }
+.peripheral-mode-dimension > header strong { color: var(--ink); font-size: 10px; }
+.peripheral-mode-dimension > header small { color: var(--muted); font-size: 9px; line-height: 1.5; }
+.peripheral-mode-dimension ul { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.peripheral-mode-dimension li { padding-top: 5px; border-top: 1px solid color-mix(in srgb, var(--line) 75%, transparent); }
+.peripheral-mode-dimension li:first-child { padding-top: 0; border-top: 0; }
+.peripheral-mode-dimension li > div { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.peripheral-mode-dimension li > div strong { color: var(--ink); font-size: 10px; }
+.peripheral-mode-dimension li > div span { color: var(--warn, #9a6515); font-size: 8px; text-align: right; }
+.peripheral-mode-dimension li > p { margin: 2px 0 0; color: var(--muted); font-size: 9px; line-height: 1.55; }
+.peripheral-modes.is-compact { margin: 16px 0; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.peripheral-guide-content .peripheral-modes > h3 { margin: 0 0 7px; font-size: 15px; }
+.peripheral-guide-content .peripheral-modes-intro, .peripheral-guide-content .peripheral-modes-caveat, .peripheral-guide-content .peripheral-modes-empty { margin: 0 0 9px; font-size: 11px; }
+.peripheral-guide-content .peripheral-mode-dimension > header strong, .peripheral-guide-content .peripheral-mode-dimension li > div strong { font-size: 11px; }
+.peripheral-guide-content .peripheral-mode-dimension li > p { font-size: 10px; }
+.peripheral-directory-use-cases > article, .peripheral-directory-comparisons > article { margin-top: 8px; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-strong); }
+.peripheral-directory-use-cases > article > strong, .peripheral-directory-comparisons > article > strong { color: var(--ink); font-size: 10px; }
+.peripheral-directory-comparisons > article p { margin: 6px 0 0; padding: 7px; border-radius: 6px; background: color-mix(in srgb, var(--accent) 5%, var(--panel)); color: var(--muted); font-size: 10px; line-height: 1.55; }
+.peripheral-directory-diagram { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin: 8px 0; }
+.peripheral-directory-diagram > span { display: inline-flex; align-items: center; gap: 5px; color: var(--accent); font-size: 10px; }
+.peripheral-directory-diagram strong { padding: 5px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel); color: var(--ink); font-size: 9px; font-weight: 550; }
+.peripheral-directory-usage-check { margin: 6px 0; color: var(--muted); font-size: 9px; line-height: 1.55; }
+.peripheral-directory-usage-check.is-matched { color: #23844c; }
+.peripheral-directory-usage-check.is-partial { color: #a66a14; }
+.peripheral-directory-use-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 12px; }
+.peripheral-directory-details .linklike { padding: 2px 0; font-size: 10px; }
+.peripheral-directory-details footer { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 18px 0 10px; }
+.peripheral-directory-details footer .primary-button { min-height: 36px; padding: 0 11px; font-size: 10px; }
+.peripheral-directory-details footer a { color: var(--accent); font-size: 10px; }
+.peripheral-directory-note { color: var(--muted); font-size: 9px; line-height: 1.55; }
+.peripheral-directory-evidence { margin-top: 6px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.peripheral-directory-evidence summary { cursor: pointer; }
+.peripheral-directory-evidence p { margin: 5px 0 0; }
+.peripheral-directory-details > section { margin-top: 24px; }
+.peripheral-directory-details h3, .peripheral-directory-details .peripheral-modes > h3 { font-size: 16px; margin-bottom: 10px; }
+.peripheral-directory-details section > p { font-size: 14px; line-height: 1.8; }
+.peripheral-directory-details section > small { font-size: 11px; }
+.peripheral-directory-details .peripheral-directory-lead { font-size: 16px; padding: 16px; }
+.peripheral-directory-details .peripheral-directory-current-mcu { padding: 12px 16px; }
+.peripheral-directory-details .peripheral-directory-current-mcu h3 { font-size: 13px; margin: 0; }
+.peripheral-directory-details .peripheral-directory-current-mcu > p { font-size: 12px; margin-top: 6px; }
+.peripheral-directory-details .peripheral-directory-current-mcu span { font-size: 11px; }
+.peripheral-directory-details .peripheral-modes-intro, .peripheral-directory-details .peripheral-modes-caveat { font-size: 13px; line-height: 1.75; }
+.peripheral-directory-details .peripheral-mode-dimension { padding: 14px 16px; }
+.peripheral-directory-details .peripheral-mode-dimension > header strong, .peripheral-directory-details .peripheral-mode-dimension li > div strong { font-size: 13px; }
+.peripheral-directory-details .peripheral-mode-dimension > header small, .peripheral-directory-details .peripheral-mode-dimension li > div span { font-size: 11px; }
+.peripheral-directory-details .peripheral-mode-dimension li > p { font-size: 13px; line-height: 1.75; }
+.peripheral-directory-details .peripheral-directory-use-cases > article, .peripheral-directory-details .peripheral-directory-comparisons > article { padding: 14px; }
+.peripheral-directory-details .peripheral-directory-use-cases > article > strong, .peripheral-directory-details .peripheral-directory-comparisons > article > strong { font-size: 13px; }
+.peripheral-directory-details .peripheral-directory-usage-check, .peripheral-directory-details .peripheral-directory-comparisons > article p { font-size: 12px; line-height: 1.75; }
+.peripheral-directory-details .peripheral-directory-diagram strong, .peripheral-directory-details .peripheral-directory-note { font-size: 11px; }
+.peripheral-directory-details .linklike, .peripheral-directory-details footer a { font-size: 12px; }
+.peripheral-directory-details footer .primary-button { font-size: 12px; }
+.peripheral-directory-empty, .peripheral-directory-no-results { display: grid; align-content: center; justify-items: center; min-height: 230px; padding: 22px; color: var(--muted); text-align: center; }
+.peripheral-directory-empty strong, .peripheral-directory-no-results strong { color: var(--ink); font-size: 13px; }
+.peripheral-directory-empty p, .peripheral-directory-no-results p { font-size: 11px; line-height: 1.6; }
+
+.mcu-browser-page {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  grid-template-rows: 72px minmax(0, 1fr);
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: 100dvh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: var(--bg);
+  box-shadow: none;
+}
+.mcu-search-page-header {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) auto minmax(190px, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--panel-strong);
+  box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--accent) 72%, transparent);
+}
+.mcu-search-page-header > div { text-align: center; }
+.mcu-search-page-header small { color: var(--accent); font: 700 9px/1.4 "Cascadia Mono", Consolas, monospace; letter-spacing: .16em; }
+.mcu-search-page-header h2 { margin: 0; color: var(--ink); font-size: 19px; }
+.mcu-search-page-header > span { justify-self: end; color: var(--muted); font-size: 12px; }
+.mcu-search-page-header > button { justify-self: start; }
+.page-navigation-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mcu-search-page-header { grid-template-columns: auto minmax(0, 1fr) auto; }
+.mcu-search-page-header .app-primary-nav,
+.peripheral-directory-header .app-primary-nav { margin-left: 0; }
+@media (max-width: 720px) {
+  .mcu-search-page-header .app-primary-nav button,
+  .peripheral-directory-header .app-primary-nav button { padding: 0 6px; font-size: 11px; }
+}
+.mcu-search-layout { display: grid; grid-template-columns: 270px minmax(360px, 1fr) 350px; min-height: 0; overflow: hidden; }
+.mcu-search-filters, .mcu-search-results, .mcu-search-details { min-width: 0; min-height: 0; overflow-y: auto; }
+.mcu-search-filters { padding: 18px 16px 28px; border-right: 1px solid var(--line); background: var(--panel); }
+.mcu-search-section-title { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+.mcu-search-section-title strong { color: var(--ink); font-size: 15px; }
+.mcu-search-section-title span { color: var(--muted); font-size: 10px; }
+.mcu-search-filters > input[type="search"] { margin-bottom: 8px; }
+.mcu-search-filters .mcu-filters { margin-bottom: 10px; }
+.mcu-search-filters .mcu-filters select[aria-label="芯片家族"] { flex-basis: 100%; }
+.mcu-spec-filter-group { margin: 0 0 10px; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-strong); }
+.mcu-spec-filter-group > strong { display: block; margin-bottom: 7px; color: var(--ink); font-size: 11px; }
+.mcu-spec-filter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+.mcu-spec-filter-grid label { display: grid; gap: 3px; min-width: 0; color: var(--muted); font-size: 9px; }
+.mcu-spec-filter-grid input { width: 100%; min-width: 0; height: 27px; padding: 0 4px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--panel); color: var(--ink); font-size: 11px; }
+.mcu-spec-filter-group .mcu-browser-note { margin: 7px 0 0; font-size: 9px; }
+.mcu-search-filters .mcu-capabilities { max-height: 36dvh; }
+.mcu-search-results { padding: 18px 22px 30px; }
+.mcu-search-results > .mcu-browser-note:first-child { margin-top: 0; }
+.mcu-search-results .mcu-feasibility-bar { position: sticky; top: 0; z-index: 2; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-strong); }
+.mcu-search-results .mcu-browser-groups { max-height: none; overflow: visible; margin-top: 10px; }
+.mcu-search-results .mcu-browser-list { max-height: none; overflow: visible; }
+.mcu-search-results .mcu-browser-list li.is-selected > .mcu-result-pick { background: color-mix(in srgb, var(--accent) 10%, var(--panel)); box-shadow: inset 3px 0 var(--accent); }
+.mcu-search-results .mcu-result-pick { border: 1px solid transparent; }
+.mcu-search-results .mcu-result-pick:hover { border-color: var(--line-strong); }
+.mcu-search-details { display: flex; flex-direction: column; gap: 14px; padding: 20px 18px 24px; border-left: 1px solid var(--line); background: var(--panel); }
+.mcu-detail-heading { padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.mcu-detail-heading small { color: var(--accent); font-size: 10px; font-weight: 650; letter-spacing: .05em; }
+.mcu-detail-heading h2 { margin: 5px 0 2px; color: var(--ink); font-size: 19px; line-height: 1.3; overflow-wrap: anywhere; }
+.mcu-detail-heading p { margin: 0; color: var(--muted); font-size: 12px; }
+.mcu-detail-specs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mcu-detail-specs > div { min-width: 0; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-strong); }
+.mcu-detail-specs span, .mcu-detail-specs strong { display: block; }
+.mcu-detail-specs span { margin-bottom: 4px; color: var(--muted); font-size: 10px; }
+.mcu-detail-specs strong { color: var(--ink); font-size: 11px; overflow-wrap: anywhere; }
+.mcu-detail-peripherals > header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.mcu-detail-peripherals h3 { margin: 0; color: var(--ink); font-size: 14px; }
+.mcu-detail-peripherals > header > span { color: var(--muted); font-size: 10px; }
+.mcu-detail-peripheral-group { margin-top: 10px; }
+.mcu-detail-peripheral-group h4 { margin: 0 0 4px; color: var(--muted); font-size: 10px; font-weight: 650; }
+.mcu-detail-peripheral { padding: 6px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.mcu-detail-peripheral > div { display: flex; align-items: center; gap: 7px; }
+.mcu-detail-peripheral > div strong { color: var(--ink); font-size: 11px; }
+.mcu-detail-peripheral > div > span { color: var(--accent); font: 650 10px "Cascadia Mono", Consolas, monospace; }
+.mcu-detail-peripheral .guide-info { margin-left: auto; padding: 1px 6px; font-size: 10px; }
+.mcu-detail-peripheral small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.mcu-detail-source { display: grid; gap: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
+.mcu-detail-source strong { color: var(--ink); font-size: 11px; }
+.mcu-detail-source span, .mcu-detail-source small { color: var(--muted); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.mcu-search-details > .mcu-detail-use { width: 100%; min-height: 40px; margin-top: auto; }
+.mcu-detail-empty { margin: auto 0; color: var(--muted); text-align: center; }
+.mcu-detail-empty strong { color: var(--ink); font-size: 14px; }
+.mcu-detail-empty p { font-size: 12px; line-height: 1.6; }
+.mcu-compare-dock { display: grid; gap: 8px; margin: 12px 0; padding: 10px; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); border-radius: 9px; background: color-mix(in srgb, var(--accent) 5%, var(--panel-strong)); }
+.mcu-compare-dock-heading { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 12px; }
+.mcu-compare-dock-heading span { color: var(--muted); font: 11px "Cascadia Mono", Consolas, monospace; }
+.mcu-compare-dock-heading .linklike { margin-left: auto; }
+.mcu-compare-chip-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.mcu-compare-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 4px 5px 4px 8px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--panel); }
+.mcu-compare-chip > span { display: grid; min-width: 0; }
+.mcu-compare-chip strong { color: var(--ink); font-size: 10px; overflow-wrap: anywhere; }
+.mcu-compare-chip small { color: var(--muted); font-size: 9px; }
+.mcu-compare-chip button { width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font-size: 17px; cursor: pointer; }
+.mcu-compare-chip button:hover { background: var(--panel-strong); color: var(--danger); }
+.mcu-start-compare { justify-self: start; min-height: 30px; padding: 5px 12px; font-size: 11px; }
+.mcu-start-compare:disabled { opacity: .55; cursor: not-allowed; }
+.mcu-comparison-view { display: flex; flex-direction: column; min-height: 0; padding: 20px 26px 26px; overflow: hidden; }
+.mcu-comparison-heading { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 18px; padding-bottom: 14px; }
+.mcu-comparison-heading strong { color: var(--ink); font-size: 15px; }
+.mcu-comparison-heading p { margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.mcu-compare-diff-toggle { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; color: var(--ink); font-size: 11px; cursor: pointer; }
+.mcu-compare-diff-toggle input { accent-color: var(--accent); }
+.mcu-compare-table-wrap { min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-strong); }
+.mcu-compare-table { width: 100%; min-width: 760px; border-collapse: separate; border-spacing: 0; color: var(--ink); font-size: 11px; }
+.mcu-compare-table th, .mcu-compare-table td { min-width: 150px; padding: 9px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.mcu-compare-table thead th { position: sticky; top: 0; z-index: 3; background: var(--panel); }
+.mcu-compare-table thead th:first-child { z-index: 4; }
+.mcu-compare-table .mcu-compare-row-label { position: sticky; left: 0; z-index: 1; width: 150px; min-width: 150px; background: var(--panel-strong); font-weight: 650; }
+.mcu-compare-table thead .mcu-compare-row-label { background: var(--panel); }
+.mcu-compare-device-heading { display: grid; justify-items: start; gap: 4px; min-width: 145px; }
+.mcu-compare-device-heading small { color: var(--muted); font-size: 9px; font-weight: 500; }
+.mcu-compare-device-heading strong { color: var(--ink); font-size: 13px; overflow-wrap: anywhere; }
+.mcu-compare-device-heading > span { color: var(--muted); font-size: 10px; }
+.mcu-compare-device-heading .mcu-placeholder-note { color: var(--warn); font-size: 9px; font-weight: 500; }
+.mcu-compare-device-heading .linklike { padding: 0; font-size: 10px; }
+.mcu-compare-table tbody tr.is-different td, .mcu-compare-table tbody tr.is-different > .mcu-compare-row-label { background: color-mix(in srgb, var(--accent) 7%, var(--panel-strong)); }
+.mcu-compare-table tbody tr.is-different td { color: var(--accent); font-weight: 650; }
+.mcu-compare-table tbody tr.is-different td small { font-weight: 400; }
+.mcu-compare-section-row th { position: static !important; padding: 8px 12px; background: color-mix(in srgb, var(--accent) 11%, var(--panel)) !important; color: var(--accent); font-size: 11px; }
+.mcu-compare-category-row th { position: static !important; padding: 7px 12px; background: var(--panel); color: var(--muted); font-size: 10px; }
+.mcu-compare-instance-names { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; font-weight: 400; }
+.mcu-compare-no-differences { padding: 26px !important; color: var(--muted); text-align: center !important; }
+.mcu-compare-empty { display: grid; place-content: center; justify-items: center; gap: 8px; flex: 1; color: var(--muted); text-align: center; }
+.mcu-compare-empty strong { color: var(--ink); }
+.mcu-compare-empty p { margin: 0 0 6px; font-size: 12px; }
+@media (max-width: 1120px) {
+  .mcu-search-layout { grid-template-columns: 240px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(260px, 34dvh); }
+  .mcu-search-filters { grid-row: 1 / span 2; }
+  .mcu-search-details { grid-column: 2; border-top: 1px solid var(--line); border-left: 0; }
+  .peripheral-directory-layout { grid-template-columns: 150px 250px minmax(0, 1fr); }
+  .peripheral-directory-details { padding: 24px; }
+  .peripheral-directory-grid { grid-template-columns: minmax(0, 1fr); }
+  .peripheral-directory-card { min-height: 0; }
+}
+@media (max-width: 720px) {
+  .peripheral-directory-page { grid-template-rows: 64px minmax(0, 1fr); }
+  .peripheral-directory-header { grid-template-columns: auto 1fr; gap: 10px; padding: 0 12px; }
+  .peripheral-directory-header > div { text-align: right; }
+  .peripheral-directory-header h1 { font-size: 16px; }
+  .peripheral-directory-header > span { display: none; }
+  .peripheral-directory-header > button { min-height: 32px; padding: 0 8px; font-size: 10px; }
+  .peripheral-directory-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(280px, 1fr) minmax(300px, auto); overflow-y: auto; }
+  .peripheral-directory-categories { display: flex; flex-wrap: wrap; gap: 4px; max-height: none; padding: 10px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .peripheral-directory-categories > div { flex: 0 0 100%; margin: 0 4px 4px; }
+  .peripheral-directory-categories > button { width: auto; min-height: 30px; gap: 7px; padding: 0 8px; }
+  .peripheral-directory-categories > p { display: none; }
+  .peripheral-directory-results { min-height: 300px; padding: 12px; }
+  .peripheral-directory-detail-pane { border-top: 1px solid var(--line); border-left: 0; }
+  .peripheral-directory-details { padding: 16px; }
+  .peripheral-directory-grid { grid-template-columns: minmax(0, 1fr); }
+  .peripheral-directory-card { padding: 9px; }
+  .peripheral-directory-card-heading { align-items: flex-start; flex-direction: column; }
+  .mcu-browser-page { grid-template-rows: 64px minmax(0, 1fr); }
+  .mcu-search-page-header { grid-template-columns: auto 1fr; gap: 10px; padding: 0 12px; }
+  .mcu-search-page-header > div { text-align: right; }
+  .mcu-search-page-header h2 { font-size: 16px; }
+  .mcu-search-page-header > span { display: none; }
+  .mcu-search-page-header > button { min-height: 32px; padding: 0 8px; font-size: 11px; }
+  .mcu-search-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(280px, 1fr) minmax(280px, auto); overflow-y: auto; }
+  .mcu-search-filters { grid-row: auto; max-height: 42dvh; border-right: 0; border-bottom: 1px solid var(--line); }
+  .mcu-search-results { min-height: 320px; padding: 14px; }
+  .mcu-search-details { grid-column: auto; max-height: none; border-left: 0; }
+  .mcu-comparison-view { padding: 14px 12px 18px; }
+  .mcu-comparison-heading { align-items: flex-start; gap: 10px; }
+  .mcu-comparison-heading strong { font-size: 13px; }
+  .mcu-comparison-heading p { max-width: 58vw; font-size: 10px; }
+  .mcu-compare-table { min-width: 680px; }
+  .mcu-compare-table th, .mcu-compare-table td { padding: 8px; }
+}
+/* Persistent two-device selection, shared by search and comparison. */
+.mcu-browser-page { grid-template-rows: 72px auto minmax(0, 1fr); }
+.mcu-dual-compare { position: relative; display: flex; align-items: center; gap: 16px; padding: 12px 24px; border-bottom: 1px solid var(--line-strong); background: var(--panel-strong); z-index: 3; }
+.mcu-dual-slots { flex: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.mcu-dual-slot { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; min-width: 0; }
+.mcu-dual-slot > strong { white-space: nowrap; color: var(--accent); font-size: 12px; }
+.mcu-dual-slot > span { flex: 1; font-size: 12px; overflow-wrap: anywhere; }
+.mcu-dual-actions { display: flex; gap: 8px; }
+.mcu-compare-picker { position: absolute; left: 24px; top: calc(100% - 2px); width: min(620px, calc(100vw - 48px)); padding: 16px; background: var(--panel-strong); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: 0 8px 24px #0003; }
+.mcu-compare-picker label { display: grid; gap: 8px; font-size: 13px; }
+.mcu-compare-picker input { width: 100%; padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+.mcu-compare-picker > button { margin-top: 8px; }
+.mcu-compare-picker ul { list-style: none; padding: 0; margin: 10px 0; max-height: 40dvh; overflow-y: auto; }
+.mcu-compare-picker li button { width: 100%; text-align: left; padding: 9px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; }
+.mcu-compare-picker li button:hover { background: var(--bg); }
+.mcu-compare-picker li button:disabled { opacity: .45; cursor: default; }
+.mcu-compare-picker > small { display: block; color: var(--muted); font-size: 11px; margin-top: 5px; }
+@media (max-width: 900px) {
+  .mcu-dual-compare { padding: 8px 12px; flex-wrap: wrap; gap: 8px; }
+  .mcu-dual-slot { flex-wrap: wrap; gap: 6px; }
+  .mcu-dual-actions { margin-left: auto; }
+}
+@media (max-width: 720px) { .mcu-browser-page { grid-template-rows: 64px auto minmax(0, 1fr); } }
