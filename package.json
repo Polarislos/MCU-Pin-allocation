@@ -4,7 +4,7 @@
   "description": "MCU 引脚规划器：按外设需求自动分配 STM32 / TI MCU 引脚",
   "author": "Polaris",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "main": "electron/main.mjs",
   "repository": {
