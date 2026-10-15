@@ -681,6 +681,15 @@ function McuSelector({ catalog, recent = [], selectedId, onChange, onPick, loadi
   const hasSearch = query.trim() !== "" || conditions.length > 0 || hasFilter;
   const setFilter = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
   const isCompared = (deviceId) => compareIds.includes(deviceId);
+
+  /* 选中一颗交给引脚规划：详情里的按钮和结果行的双击走同一条路。
+     双击的第一下已经选中了这一行，所以库缺失时详情面板里正好显示原因。 */
+  async function planWith(device) {
+    if (loading || !deviceAvailability(device, libraryStatus).ok) return;
+    setSelectedDeviceId(device.id);
+    const loaded = await onPick(device);
+    if (loaded !== false) onClosePage?.();
+  }
   function toggleCompared(device) {
     setCompareIds((current) => current.includes(device.id)
       ? current.filter((id) => id !== device.id)
@@ -1161,7 +1170,7 @@ function McuSelector({ catalog, recent = [], selectedId, onChange, onPick, loadi
               </button>
             </p>
           )}
-          <p className="mcu-browser-note">按家族查看匹配结果：点击家族展开型号，再点击子系列展开具体型号，每页最多显示 30 个封装组合。</p>
+          <p className="mcu-browser-note">按家族查看匹配结果：点击家族展开型号，再点击子系列展开具体型号，每页最多显示 30 个封装组合。双击型号直接进入引脚规划。</p>
           <div className="mcu-browser-groups">
             {resultGroups.map((family) => (
               <details className="mcu-family-group" key={family.key} open={expandedFamily === family.key}
@@ -1184,14 +1193,16 @@ function McuSelector({ catalog, recent = [], selectedId, onChange, onPick, loadi
                     {expandedSeries === series.name && <ul className="mcu-browser-list">
                       {visibleItems.map(({ device, hits, unknown }) => (
                         <li key={device.id} className={["has-actions", selectedResult?.device.id === device.id ? "is-selected" : ""].filter(Boolean).join(" ")}>
-                          <button type="button" className="mcu-result-pick" title="查看器件详情" onClick={() => setSelectedDeviceId(device.id)}>
+                          <button type="button" className="mcu-result-pick" title="单击查看详情，双击直接用于引脚规划"
+                            onClick={() => setSelectedDeviceId(device.id)}
+                            onDoubleClick={() => planWith(device)}>
                             <strong title={hasPlaceholder(device.part) ? "x 是厂商数据库的等级占位符，不是完整订货型号" : undefined}>{device.part}</strong>
                             <span>{device.package} · {device.pinCount ? `${device.pinCount} 脚` : "脚数未知"}</span>
                             <em>{device.series}{device.core ? ` · ${device.core}` : ""}{hasPeripheralData(device) ? "" : " · 外设数据未收录"}</em>
                             {hits.length > 0 && <em className={view === "incomplete" ? "mcu-hit is-missing" : "mcu-hit"}>{hits.map(describeHit).join(" · ")}</em>}
                             {unknown?.length > 0 && <em className="mcu-hit is-unknown">数据未知：{unknown.map((condition) => conditionLabel(condition)).join("、")}</em>}
                             {!deviceAvailability(device, libraryStatus).ok && <em className="mcu-hit is-unavailable">{deviceAvailability(device, libraryStatus).reason}，暂不能用于规划</em>}
-                            <em className="mcu-use">查看详情 →</em>
+                            <em className="mcu-use">单击查看详情 · 双击用于引脚规划 →</em>
                             {canCheck && feasibilityOf(device) && <FeasibilityLine entry={feasibilityOf(device)} debugKept={protectDebug} />}
                           </button>
                           <div className="mcu-result-actions">
@@ -1298,10 +1309,7 @@ function McuSelector({ catalog, recent = [], selectedId, onChange, onPick, loadi
                     type="button"
                     className="primary-button mcu-detail-use"
                     disabled={loading || !deviceAvailability(selectedResult.device, libraryStatus).ok}
-                    onClick={async () => {
-                      const loaded = await onPick(selectedResult.device);
-                      if (loaded !== false) onClosePage?.();
-                    }}
+                    onClick={() => planWith(selectedResult.device)}
                   >
                     {loading ? "正在加载引脚数据…" : "用于引脚规划 →"}
                   </button>
