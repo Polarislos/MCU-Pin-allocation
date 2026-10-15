@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App, { bootstrapMcuId } from "./App.jsx";
-import { ensureMcuLoaded } from "./lib/mcuCatalog.js";
+import App, { bootstrapMcu } from "./App.jsx";
+import { DEFAULT_MCU_ID, ensureMcuLoaded, loadMcuById } from "./lib/mcuCatalog.js";
 import "./styles.css";
 
 /* 运行时导入来自本机 CubeMX / SysConfig，任何未预料的数据差异都不应
@@ -34,13 +34,23 @@ class AppErrorBoundary extends React.Component {
 
 /* 引脚表是懒加载的，所以先把这一次要用的那颗片子取回来再挂载。
    App 内部对"当前这颗片子"是同步取值的——先加载好，组件树里就不用到处
-   铺加载态；换片子时的等待由 handleMcuChange 单独处理。 */
-await ensureMcuLoaded(bootstrapMcuId());
+   铺加载态；换片子时的等待由 handleMcuChange 单独处理。
+   上次用的若是选型页里的按需器件，这里同样先找本地服务取回来（转换过的有
+   缓存，基本是秒开）。取不回来就退回默认器件并说明原因，而不是悄悄换片子。 */
+const boot = bootstrapMcu();
+let bootNotice = null;
+try {
+  await loadMcuById(boot.id, boot.query);
+} catch (error) {
+  await ensureMcuLoaded(DEFAULT_MCU_ID);
+  const label = boot.query?.part || boot.id;
+  bootNotice = { kind: "error", text: `上次使用的 ${label} 没能重新载入：${error.message}。已暂时切回默认器件。` };
+}
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <AppErrorBoundary>
-      <App />
+      <App bootNotice={bootNotice} />
     </AppErrorBoundary>
   </React.StrictMode>,
 );

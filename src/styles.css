@@ -1667,3 +1667,51 @@ body {
   .mcu-dual-actions { margin-left: auto; }
 }
 @media (max-width: 720px) { .mcu-browser-page { grid-template-rows: 64px auto minmax(0, 1fr); } }
+
+/*
+  封装图缩放视口。中栏改成"工具栏 + 视口"两行：视口自己滚动，缩放控件浮在
+  视口右上角不跟着滚走。舞台用 margin: auto 居中——比 place-items: center
+  安全，放大溢出后左上角仍然滚得到。
+*/
+.pinout-panel { display: flex; flex-direction: column; overflow: hidden; }
+.pinout-toolbar { flex: 0 0 auto; }
+.package-canvas { position: relative; flex: 1 1 auto; min-height: 320px; }
+.package-viewport { position: absolute; inset: 0; display: flex; padding: 46px 14px 14px; overflow: auto; overscroll-behavior: contain; }
+.package-viewport > .package-stage { flex: 0 0 auto; margin: auto; }
+.package-viewport.can-pan { cursor: grab; }
+.package-viewport.is-panning { cursor: grabbing; user-select: none; }
+.package-viewport.is-panning .pin { cursor: grabbing; }
+.package-viewport { scrollbar-color: var(--scroll-thumb) transparent; scrollbar-width: thin; }
+.package-zoom-controls {
+  position: absolute;
+  z-index: 6;
+  top: 8px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--legend-bg);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 14px rgb(35 74 124 / 0.1);
+}
+.package-zoom-controls button {
+  min-width: 28px;
+  height: 26px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+.package-zoom-controls button:first-child,
+.package-zoom-controls button:nth-child(3) { font-size: 16px; line-height: 1; }
+.package-zoom-controls button:hover:not(:disabled) { background: var(--hover-bg); }
+.package-zoom-controls button:disabled { opacity: 0.4; cursor: default; }
+.package-zoom-controls button.is-active { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); font-weight: 650; }
+.package-zoom-controls output { min-width: 44px; color: var(--muted); font: 11px "Cascadia Mono", Consolas, monospace; text-align: center; }
+.package-zoom-divider { width: 1px; height: 16px; margin: 0 3px; background: var(--line); }

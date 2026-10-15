@@ -6,7 +6,7 @@
 */
 import assert from "node:assert/strict";
 import { allocatePins } from "../src/lib/allocator.js";
-import { MCU_CATALOG, ensureMcuLoaded } from "../src/lib/mcuCatalog.js";
+import { MCU_CATALOG, ensureMcuLoaded, registerMcu, resolveRuntimeQuery } from "../src/lib/mcuCatalog.js";
 import {
   PROJECT_FORMAT, PROJECT_VERSION, loadProject, parseProject, projectFileName, projectToJson, serializeProject,
 } from "../src/lib/project.js";
@@ -264,6 +264,21 @@ assert.deepEqual(
   ).map((row) => `${row.status}:${(row.to || row.from).type}`),
   ["changed:SPI", "removed:I2C"],
 );
+
+/* 选型页里的按需器件：工程要记下重新取回它的索引查询，默认目录也要认得
+   本次会话已取回的片子——以前这两处都只认固化目录，按需器件一刷新就丢。 */
+const runtimeId = "st-test-runtime-lqfp100";
+const runtimeQuery = { id: runtimeId, vendor: "st", part: "STM32TESTx", package: "LQFP100" };
+registerMcu({ id: runtimeId, partNumber: "STM32TESTx", package: "LQFP100", runtime: true, query: runtimeQuery }, { ...mcu, id: runtimeId });
+const runtimeJson = projectToJson(serializeProject({ ...baseState, mcuId: runtimeId, mcuQuery: runtimeQuery }));
+assert.deepEqual(JSON.parse(runtimeJson).mcu.query, { vendor: "st", part: "STM32TESTx", package: "LQFP100" });
+assert.equal(loadProject(runtimeJson).ok, true, "按需器件的工程应能用默认目录还原");
+assert.equal("query" in JSON.parse(json).mcu, false, "固化器件的工程不写 query，旧文件逐字节不变");
+
+/* 旧版"最近使用"存的是转换结果的写法，服务端不认，必须纠正回索引写法 */
+assert.deepEqual(await resolveRuntimeQuery(runtimeQuery), runtimeQuery);
+assert.equal((await resolveRuntimeQuery({ ...runtimeQuery, vendor: "STMicroelectronics" })).vendor, "st");
+assert.equal((await resolveRuntimeQuery({ id: "x", vendor: "Texas Instruments", part: "MSPM0X", package: "LQFP48 (PT)" })).vendor, "ti");
 
 console.log(`Verified project round-trip (${json.length} bytes), stable key order, corrupt-file recovery.`);
 console.log("Verified plan diff: instance swap, signal move, pin take/free accounting, and request-row diff.");

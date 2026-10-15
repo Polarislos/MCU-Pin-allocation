@@ -15,7 +15,7 @@
   页面打不开。
 */
 import { DEFINITIONS, SIDES } from "./allocator.js";
-import { MCU_CATALOG } from "./mcuCatalog.js";
+import { knownMcus } from "./mcuCatalog.js";
 
 export const PROJECT_FORMAT = "mcu-pin-planner.project";
 export const PROJECT_VERSION = 1;
@@ -58,6 +58,7 @@ function serializeRequest(request) {
 export function serializeProject({
   mcuId,
   mcu,
+  mcuQuery = null,
   requests = [],
   options = {},
   excludedPins = [],
@@ -76,6 +77,9 @@ export function serializeProject({
       source: mcu?.source
         ? { document: mcu.source.document, revision: mcu.source.revision }
         : null,
+      /* 按需器件（不在固化目录里）重新取回引脚数据要用的索引查询。
+         固化器件不写这个键，旧工程文件的内容因此逐字节不变。 */
+      ...(mcuQuery ? { query: { vendor: mcuQuery.vendor, part: mcuQuery.part, package: mcuQuery.package || "" } } : {}),
     },
     options: {
       protectDebug: options.protectDebug !== false,
@@ -179,13 +183,13 @@ function hydrateGroup(group, byNumber, warnings, label) {
 
 /*
   把校验过的工程对象还原成 App 能直接吃的状态。
-  catalog 默认用内置的 MCU_CATALOG，测试里可以注入。
+  catalog 默认用固化目录 + 本次会话已取回的按需器件，测试里可以注入。
 
-  引脚表是懒加载的，所以调用方必须先 await ensureMcuLoaded(value.mcu.id)。
+  引脚表是懒加载的，所以调用方必须先 await loadMcuById(value.mcu.id, value.mcu.query)。
   没加载就还原会拿到一份没有引脚的 mcu，进而把工程里每个引脚都判成"不存在"
   ——那是一条会骗人的错误路径，宁可在这里直接失败。
 */
-export function hydrateProject(value, catalog = MCU_CATALOG) {
+export function hydrateProject(value, catalog = knownMcus()) {
   const warnings = [];
   const record = catalog.find((item) => item.id === value.mcu.id);
   if (!record) {
@@ -259,7 +263,7 @@ export function hydrateProject(value, catalog = MCU_CATALOG) {
 }
 
 /* 一步到位：文本 → 可用状态。UI 只需处理 {ok, errors, warnings, value}。 */
-export function loadProject(text, catalog = MCU_CATALOG) {
+export function loadProject(text, catalog = knownMcus()) {
   const parsed = parseProject(text);
   if (!parsed.ok) return { ok: false, errors: parsed.errors, warnings: [], value: null };
   return hydrateProject(parsed.value, catalog);

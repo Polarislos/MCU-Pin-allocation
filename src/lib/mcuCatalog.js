@@ -131,16 +131,59 @@ export function deviceAvailability(device, status) {
 }
 
 /*
+  按需器件的查询参数 { id, vendor, part, package }，写法必须和 deviceIndex.json
+  一致：vendor 是 "st" / "ti"，package 是索引里的封装名（TI 是 "LQFP-48(PT)"）。
+
+  转换结果里的同名字段写法不同（vendor = "STMicroelectronics"，TI 封装 =
+  "LQFP48 (PT)"），拿它们回头再查会被服务端拒掉——旧版"最近使用"和工程文件
+  就是这么坏的。所以写法不对时按 id 回索引取原条目；id 本身就是索引的 id。
+*/
+const VENDOR_CODES = { st: "st", stmicroelectronics: "st", ti: "ti", "texas instruments": "ti" };
+
+function vendorCode(vendor) {
+  return VENDOR_CODES[String(vendor || "").trim().toLowerCase()] || null;
+}
+
+let deviceIndexEntries = null;
+
+async function indexEntryById(id) {
+  if (!deviceIndexEntries) {
+    deviceIndexEntries = import("../data/deviceIndex.json").then((module) => (
+      new Map(module.default.devices.map((device) => [device.id, device]))
+    ));
+  }
+  return (await deviceIndexEntries).get(id) || null;
+}
+
+export function runtimeQueryOf(entry) {
+  if (!entry?.id) return null;
+  return { id: entry.id, vendor: entry.vendor, part: entry.part, package: entry.package || "" };
+}
+
+export async function resolveRuntimeQuery(entry) {
+  const code = vendorCode(entry?.vendor);
+  /* 写法已经是索引格式的直接用，省掉一次 1.5 MB 的索引加载 */
+  if (entry?.id && entry.part && code === entry.vendor && (code === "st" || entry.package)) {
+    return runtimeQueryOf(entry);
+  }
+  const indexed = entry?.id ? await indexEntryById(entry.id).catch(() => null) : null;
+  if (indexed) return runtimeQueryOf(indexed);
+  if (!entry?.id || !code || !entry.part) {
+    throw new Error(`器件索引里找不到「${entry?.id || entry?.part || "未知型号"}」，请到 MCU 选型页重新选择`);
+  }
+  return { ...runtimeQueryOf(entry), vendor: code };
+}
+
+/*
   从本地服务器取一颗按需器件。
 
   失败原因必须原样透出：本机没装 CubeMX、这颗片子的封装形态转换不出来、
   或者根本是静态部署（接口不存在）——三种情况的处理方式完全不同，糊成
   "加载失败"会让人无从下手。
 */
-export async function fetchRuntimeMcu(entry) {
-  const query = new URLSearchParams({
-    id: entry.id, vendor: entry.vendor, part: entry.part, package: entry.package || "",
-  });
+export async function fetchRuntimeMcu(input) {
+  const entry = await resolveRuntimeQuery(input);
+  const query = new URLSearchParams(entry);
   let response;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 60_000);
@@ -178,6 +221,8 @@ export async function fetchRuntimeMcu(entry) {
     analogConvention: payload.device.analogConvention,
     status: payload.device.status,
     runtime: true,
+    /* 重新取回这颗片子要用的原始查询：重启恢复、最近使用、工程文件都靠它 */
+    query: entry,
   };
   const runtimeRecord = registerMcu(record, payload.device);
   return { record: runtimeRecord, data: payload.device, warnings: payload.warnings || [], cached: payload.cached };
@@ -215,6 +260,28 @@ export async function ensureMcuLoaded(id) {
     }));
   }
   return inflight.get(entry.id);
+}
+
+export function isBuiltinMcu(id) {
+  return MCU_MANIFEST.some((item) => item.id === id);
+}
+
+/*
+  按 id 取一颗片子，不管它是固化的还是按需的。重启恢复、载入工程文件、
+  下拉里的"最近使用"都走这里——这些入口手里只有 id 和一份可能过时的查询参数。
+
+  注意不能直接 ensureMcuLoaded(id)：不认识的 id 在那里会退回目录第一颗，
+  等于悄悄换了一颗片子。
+*/
+export async function loadMcuById(id, hint = null) {
+  if (isBuiltinMcu(id)) {
+    const data = await ensureMcuLoaded(id);
+    return { record: getMcuById(id), data, warnings: [], cached: true };
+  }
+  if (runtime.has(id) && loaded.has(id)) {
+    return { record: runtime.get(id), data: loaded.get(id), warnings: [], cached: true };
+  }
+  return fetchRuntimeMcu({ ...(hint || {}), id });
 }
 
 export function catalogLabel(item) {

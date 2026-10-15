@@ -84,8 +84,11 @@ export function rememberMcu(record) {
     partNumber: record.partNumber,
     package: record.package,
     vendor: record.vendor,
-    /* 按需器件重新加载要用的原始查询字段 */
+    /* 按需器件重新加载要用的原始查询字段。query 是索引写法（vendor = "st"），
+       part / packageName 是旧版留下的显示写法，只在没有 query 的旧记录上兜底，
+       由 resolveRuntimeQuery() 按 id 回索引纠正。 */
     runtime: Boolean(record.runtime),
+    query: record.query || null,
     part: record.partNumber,
     packageName: record.packageName || record.package,
     at: Date.now(),

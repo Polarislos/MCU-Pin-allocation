@@ -3,7 +3,7 @@ import PageNavigation from "./components/PageNavigation.jsx";
 import PeripheralGuidePanel from "./components/PeripheralGuidePanel.jsx";
 import PeripheralDirectoryPage from "./components/PeripheralDirectoryPage.jsx";
 import { PERIPHERAL_GUIDES, guideForPeripheral } from "./data/peripheralGuides/index.js";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   DEFINITIONS, PERIPHERAL_TYPE_ORDER, SIDES, createRequest, instancesForType, isFiveVoltTolerant,
   protocolForFunction, supportsFiveVolt,
@@ -16,7 +16,7 @@ import {
 import { packageLayout } from "./lib/package.js";
 import {
   DEFAULT_MCU_ID, LIBRARY_NAMES, MCU_CATALOG, catalogLabel, deviceAvailability, ensureMcuLoaded, fetchLibraryStatus,
-  fetchRuntimeMcu, getMcuById, isMcuLoaded,
+  fetchRuntimeMcu, getMcuById, isBuiltinMcu, isMcuLoaded, loadMcuById,
 } from "./lib/mcuCatalog.js";
 import { MODULE_CATALOG } from "./data/moduleCatalog.js";
 import { analysisToRequestRows, analyzeRequirementsText } from "./lib/ai/assistant.js";
@@ -50,23 +50,34 @@ function isTextEditing(target) {
 }
 
 /*
-  挂载前要预加载哪颗片子的引脚表。只解析出 mcuId，不做完整校验——
+  挂载前要预加载哪颗片子的引脚表。只解析出 { id, query }，不做完整校验——
   真正的还原仍然走 readStoredProject()，这里错了最多是多下一份数据。
+
+  上次用的若是选型页里的按需器件，query 是重新取回它的索引查询；旧版工程
+  没存 query，交给 loadMcuById() 按 id 回索引补。以前这里只认固化目录，
+  按需器件一刷新就被悄悄换回默认的 H743。
 */
-export function bootstrapMcuId() {
-  if (typeof window === "undefined") return DEFAULT_MCU_ID;
+export function bootstrapMcu() {
+  const fallback = { id: DEFAULT_MCU_ID, query: null };
+  if (typeof window === "undefined") return fallback;
   try {
     /* 优先级：上次的工程 > 个人中心设的默认器件 > 内置默认。
        工程排第一是因为"接着上次改"比"每次都开同一颗"更常见；个人中心那项
        解决的是"我这块板子就用这颗，别老给我开 H743"。 */
     const stored = JSON.parse(window.localStorage.getItem(PROJECT_STORAGE_KEY) || "null");
     const fromProject = stored?.mcu?.id;
-    if (MCU_CATALOG.some((item) => item.id === fromProject)) return fromProject;
+    if (typeof fromProject === "string" && fromProject) return { id: fromProject, query: stored.mcu.query || null };
     const preferred = readPreferences().defaultMcuId;
-    return MCU_CATALOG.some((item) => item.id === preferred) ? preferred : DEFAULT_MCU_ID;
+    return MCU_CATALOG.some((item) => item.id === preferred) ? { id: preferred, query: null } : fallback;
   } catch {
-    return DEFAULT_MCU_ID;
+    return fallback;
   }
+}
+
+/* 最近使用列表里的一项 → 重新取回它的查询。新记录带 query；旧记录只有显示
+   写法，resolveRuntimeQuery() 会按 id 回索引纠正。 */
+function recentQuery(item) {
+  return item.query || { id: item.id, vendor: item.vendor, part: item.part, package: item.packageName };
 }
 
 /* 上次的工作状态。刷新就丢是这个工具最大的短板——存不下就没法进评审流程。
@@ -287,9 +298,9 @@ async function loadProjectFile(file) {
   const parsed = parseProject(text);
   if (parsed.ok) {
     try {
-      await ensureMcuLoaded(parsed.value.mcu.id);
-    } catch {
-      return { ok: false, errors: [`MCU「${parsed.value.mcu.id}」的引脚数据加载失败`], warnings: [], value: null };
+      await loadMcuById(parsed.value.mcu.id, parsed.value.mcu.query);
+    } catch (error) {
+      return { ok: false, errors: [`MCU「${parsed.value.mcu.id}」的引脚数据加载失败：${error.message}`], warnings: [], value: null };
     }
   }
   return loadProject(text);
@@ -431,7 +442,7 @@ function ThemeSwitch({ mode, resolved, onChange }) {
   );
 }
 
-function McuSelector({ catalog, selectedId, onChange, onPick, loading, notice, projectRequests = [], onGuide, guideSearch, pageOpen, onOpenPage, onClosePage, onNavigate, libraryStatus, onOpenLibrarySettings }) {
+function McuSelector({ catalog, recent = [], selectedId, onChange, onPick, loading, notice, projectRequests = [], onGuide, guideSearch, pageOpen, onOpenPage, onClosePage, onNavigate, libraryStatus, onOpenLibrarySettings }) {
   const [initialSearch] = useState(readMcuSearchState);
   const [browsing, setBrowsing] = useState(false);
   const [index, setIndex] = useState(null);
@@ -760,16 +771,26 @@ function McuSelector({ catalog, selectedId, onChange, onPick, loading, notice, p
       <span>目标 MCU</span>
       <select
         aria-label="选择 MCU"
-        value={catalog.some((item) => item.id === selectedId) ? selectedId : ""}
+        value={catalog.some((item) => item.id === selectedId) || recent.some((item) => item.id === selectedId) ? selectedId : ""}
         disabled={loading}
         onChange={(event) => onChange(event.target.value)}
       >
-        {!catalog.some((item) => item.id === selectedId) && (
+        {!catalog.some((item) => item.id === selectedId) && !recent.some((item) => item.id === selectedId) && (
           <option value="">{catalogLabel(getMcuById(selectedId))}（按需加载）</option>
         )}
-        {catalog.map((item) => (
-          <option key={item.id} value={item.id}>{catalogLabel(item)}</option>
-        ))}
+        <optgroup label="内置型号">
+          {catalog.map((item) => (
+            <option key={item.id} value={item.id}>{catalogLabel(item)}</option>
+          ))}
+        </optgroup>
+        {/* 选型页里用过的型号。不列出来的话，切回内置型号后就只能再去选型页搜一遍 */}
+        {recent.length > 0 && (
+          <optgroup label="最近使用（选型页）">
+            {recent.map((item) => (
+              <option key={item.id} value={item.id}>{catalogLabel(item)}</option>
+            ))}
+          </optgroup>
+        )}
       </select>
       <small>
         {loading ? "正在加载引脚数据…" : (
@@ -1780,10 +1801,176 @@ function packageMetrics(perSide) {
   };
 }
 
+/*
+  封装图缩放。
+
+  用 CSS zoom 而不是 transform: scale——zoom 会参与布局，滚动范围、点击位置
+  和文字清晰度都跟着对；transform 只缩画面，放大后文字发虚、滚动条还按原尺寸算。
+
+  默认"适应"：按视口大小算一个倍率，大封装（LQFP144/176、BGA）不再溢出面板，
+  小封装也不至于缩在中间一小块。手动缩放后退出适应模式，换片子时再回到适应。
+*/
+const ZOOM_MIN = 0.25;
+const ZOOM_MAX = 3;
+const ZOOM_FIT_MAX = 1.6;
+const ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+const clampZoom = (value) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
+
+function nextZoomStep(current, direction) {
+  return direction > 0
+    ? ZOOM_STEPS.find((step) => step > current + 0.001) ?? ZOOM_MAX
+    : [...ZOOM_STEPS].reverse().find((step) => step < current - 0.001) ?? ZOOM_MIN;
+}
+
+function usePackageZoom(resetKey) {
+  const viewportRef = useRef(null);
+  const stageRef = useRef(null);
+  const [zoom, setZoom] = useState(1);
+  const [fitMode, setFitMode] = useState(true);
+  const [overflowing, setOverflowing] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  /* 以某个屏幕点为锚缩放：记下锚点在封装上的位置，布局更新后把它滚回原处 */
+  const anchorRef = useRef(null);
+
+  useEffect(() => { setFitMode(true); }, [resetKey]);
+
+  /* 视口尺寸或封装变化时，适应模式重新算倍率；同时更新"能否拖动平移" */
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    const stage = stageRef.current;
+    if (!viewport || !stage) return undefined;
+    const measure = () => {
+      const current = zoomRef.current || 1;
+      const rect = stage.getBoundingClientRect();
+      const naturalW = rect.width / current;
+      const naturalH = rect.height / current;
+      if (fitMode && naturalW > 0 && naturalH > 0) {
+        /* 视口的内边距是给浮动缩放控件留的位置，适应时不能占用 */
+        const style = getComputedStyle(viewport);
+        const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+        const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+        const available = Math.min((viewport.clientWidth - padX) / naturalW, (viewport.clientHeight - padY) / naturalH);
+        const fitted = clampZoom(Math.min(ZOOM_FIT_MAX, Math.floor(available * 100) / 100));
+        if (Math.abs(fitted - current) > 0.005) setZoom(fitted);
+      }
+      setOverflowing(viewport.scrollWidth > viewport.clientWidth + 1 || viewport.scrollHeight > viewport.clientHeight + 1);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(viewport);
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, [fitMode, zoom, resetKey]);
+
+  useLayoutEffect(() => {
+    const anchor = anchorRef.current;
+    const viewport = viewportRef.current;
+    const stage = stageRef.current;
+    anchorRef.current = null;
+    if (!anchor || !viewport || !stage) return;
+    const rect = stage.getBoundingClientRect();
+    viewport.scrollLeft += rect.left + anchor.x * zoom - anchor.clientX;
+    viewport.scrollTop += rect.top + anchor.y * zoom - anchor.clientY;
+  }, [zoom]);
+
+  function zoomTo(value, clientPoint = null) {
+    const next = clampZoom(Math.round(value * 100) / 100);
+    const viewport = viewportRef.current;
+    const stage = stageRef.current;
+    setFitMode(false);
+    if (next === zoomRef.current || !viewport || !stage) {
+      setZoom(next);
+      return;
+    }
+    const box = viewport.getBoundingClientRect();
+    const point = clientPoint || { clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 };
+    const rect = stage.getBoundingClientRect();
+    anchorRef.current = {
+      clientX: point.clientX,
+      clientY: point.clientY,
+      x: (point.clientX - rect.left) / zoomRef.current,
+      y: (point.clientY - rect.top) / zoomRef.current,
+    };
+    setZoom(next);
+  }
+
+  /* Ctrl+滚轮缩放。React 的 onWheel 是被动监听，拦不住浏览器自己的整页缩放，
+     所以手动挂一个 passive: false 的监听。不按 Ctrl 的滚轮照常滚动。 */
+  const zoomToRef = useRef(zoomTo);
+  zoomToRef.current = zoomTo;
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return undefined;
+    const onWheel = (event) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+      zoomToRef.current(zoomRef.current * Math.exp(-delta * 0.0015), event);
+    };
+    viewport.addEventListener("wheel", onWheel, { passive: false });
+    return () => viewport.removeEventListener("wheel", onWheel);
+  }, []);
+
+  /* 放大后按住空白处（左键）或任意位置（中键）拖动平移。点在引脚上的左键
+     仍然是选脚，不能被拖动吃掉。 */
+  const dragRef = useRef(null);
+  const endDrag = (event) => {
+    if (dragRef.current?.id !== event.pointerId) return;
+    dragRef.current = null;
+    setDragging(false);
+  };
+  const panHandlers = {
+    onPointerDown(event) {
+      const viewport = viewportRef.current;
+      if (!viewport || !overflowing) return;
+      const isMiddle = event.button === 1;
+      if (!isMiddle && (event.button !== 0 || event.target.closest("button, a, input, select, label"))) return;
+      event.preventDefault();
+      viewport.setPointerCapture(event.pointerId);
+      dragRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
+      setDragging(true);
+    },
+    onPointerMove(event) {
+      const drag = dragRef.current;
+      const viewport = viewportRef.current;
+      if (!drag || drag.id !== event.pointerId || !viewport) return;
+      viewport.scrollLeft = drag.left - (event.clientX - drag.x);
+      viewport.scrollTop = drag.top - (event.clientY - drag.y);
+    },
+    onPointerUp: endDrag,
+    onPointerCancel: endDrag,
+  };
+
+  return {
+    viewportRef, stageRef, zoom, fitMode, overflowing, dragging, panHandlers,
+    zoomIn: () => zoomTo(nextZoomStep(zoomRef.current, 1)),
+    zoomOut: () => zoomTo(nextZoomStep(zoomRef.current, -1)),
+    zoomActual: () => zoomTo(1),
+    zoomFit: () => setFitMode(true),
+  };
+}
+
+function PackageZoomControls({ view }) {
+  return (
+    <div className="package-zoom-controls" role="toolbar" aria-label="封装图缩放">
+      <button type="button" onClick={view.zoomOut} disabled={view.zoom <= ZOOM_MIN} aria-label="缩小" title="缩小（Ctrl+滚轮）">−</button>
+      <output aria-live="polite" title="当前缩放比例">{Math.round(view.zoom * 100)}%</output>
+      <button type="button" onClick={view.zoomIn} disabled={view.zoom >= ZOOM_MAX} aria-label="放大" title="放大（Ctrl+滚轮）">+</button>
+      <span className="package-zoom-divider" aria-hidden="true" />
+      <button type="button" className={view.fitMode ? "is-active" : ""} aria-pressed={view.fitMode} onClick={view.zoomFit} title="按面板大小适应">适应</button>
+      <button type="button" onClick={view.zoomActual} title="原始大小">100%</button>
+    </div>
+  );
+}
+
 export function PackageView({ mcuData, pins, selectedPin, onSelect, excludedPins, assignedPins, search, stale, highlightedPeripheral, onClearPeripheralHighlight }) {
   /* 边和坐标一律取自 package.js——求解器给"靠右"打分用的是同一份换算，
      这里另算一遍就会出现图上画在右边、求解器认为在顶边的引脚。 */
   const layout = useMemo(() => packageLayout(mcuData), [mcuData]);
+  const view = usePackageZoom(mcuData);
   const isGrid = layout.kind === "grid";
   const perSide = isGrid ? Math.max(layout.grid.rows, layout.grid.columns) : layout.pinsPerSide;
   const { scale, pinThick, pinGap, bodyPad, lead } = packageMetrics(perSide);
@@ -1870,12 +2057,26 @@ export function PackageView({ mcuData, pins, selectedPin, onSelect, excludedPins
 
   const stageClass = `package-stage package-${layout.kind}${stale ? " is-stale" : ""}${hasPeripheralFocus ? " has-peripheral-focus" : ""}`;
   const stageLabel = `${mcuData.partNumber} ${mcuData.package} 封装图`;
+  const stageStyle = { ...packageStyle, zoom: view.zoom };
+
+  const canvas = (stage) => (
+    <div className="package-canvas">
+      <div
+        ref={view.viewportRef}
+        className={`package-viewport${view.overflowing ? " can-pan" : ""}${view.dragging ? " is-panning" : ""}`}
+        {...view.panHandlers}
+      >
+        {stage}
+      </div>
+      <PackageZoomControls view={view} />
+    </div>
+  );
 
   /* BGA / WLCSP 没有引脚排，只有球阵。行标（A、B、C…）和列号沿边标出来，
      否则一屏几百个球根本读不出位置。 */
   if (isGrid) {
-    return (
-      <div className={stageClass} style={packageStyle} aria-label={stageLabel}>
+    return canvas(
+      <div ref={view.stageRef} className={stageClass} style={stageStyle} aria-label={stageLabel}>
         {focusBanner}
         <div className="ball-grid-title">
           <strong>{mcuData.partNumber}</strong>
@@ -1895,12 +2096,12 @@ export function PackageView({ mcuData, pins, selectedPin, onSelect, excludedPins
             </Fragment>
           ))}
         </div>
-      </div>
+      </div>,
     );
   }
 
-  return (
-    <div className={stageClass} style={packageStyle} aria-label={stageLabel}>
+  return canvas(
+    <div ref={view.stageRef} className={stageClass} style={stageStyle} aria-label={stageLabel}>
       <div className="pin-side pin-side-top">{layout.sides.top.map(renderPin)}</div>
       <div className="pin-side pin-side-right">{layout.sides.right.map(renderPin)}</div>
       <div className="pin-side pin-side-bottom">{layout.sides.bottom.map(renderPin)}</div>
@@ -1912,7 +2113,7 @@ export function PackageView({ mcuData, pins, selectedPin, onSelect, excludedPins
         <strong>{mcuData.partNumber}</strong>
         <small>{[mcuData.core, mcuData.package].filter(Boolean).join(" · ")}</small>
       </div>
-    </div>
+    </div>,
   );
 }
 
@@ -2249,7 +2450,7 @@ export function DiffPanel({ solutions = [], activeIndex = 0, baseline, requests 
   );
 }
 
-function App() {
+function App({ bootNotice = null }) {
   const [activePage, setActivePage] = useState(() => (
     typeof window !== "undefined" && window.location.hash.startsWith("#/mcus")
       ? "mcus"
@@ -2267,7 +2468,7 @@ function App() {
   const [mcuLoading, setMcuLoading] = useState(false);
   /* 按需器件的加载结果单独提示：它与工程文件的提示（projectNotice）来源不同，
      混在一起会互相覆盖。 */
-  const [mcuNotice, setMcuNotice] = useState(null);
+  const [mcuNotice, setMcuNotice] = useState(bootNotice);
 
   useEffect(() => {
     const syncPage = () => setActivePage(window.location.hash.startsWith("#/mcus")
@@ -2496,6 +2697,7 @@ function App() {
       window.localStorage.setItem(PROJECT_STORAGE_KEY, projectToJson(serializeProject({
         mcuId: selectedMcuId,
         mcu,
+        mcuQuery: mcuRecord.query,
         requests,
         options,
         excludedPins,
@@ -2555,6 +2757,12 @@ function App() {
 
   async function handleMcuChange(nextId) {
     if (nextId === selectedMcuId || !nextId) return;
+    /* 下拉里"最近使用"那组是按需器件，要重新问服务器要数据 */
+    if (!isBuiltinMcu(nextId)) {
+      const recent = preferences.recentMcus.find((item) => item.id === nextId);
+      await handleMcuPick(recent ? recentQuery(recent) : { id: nextId });
+      return;
+    }
     const nextRecord = getMcuById(nextId);
     let nextMcu = nextRecord.data;
     if (!nextMcu) {
@@ -2593,7 +2801,7 @@ function App() {
       return true;
     } catch (error) {
       setMcuLoading(false);
-      setMcuNotice({ kind: "error", text: `${entry.part} 加载失败：${error.message}` });
+      setMcuNotice({ kind: "error", text: `${entry.part || entry.id} 加载失败：${error.message}` });
       return false;
     }
   }
@@ -2833,6 +3041,7 @@ function App() {
     downloadText(projectToJson(serializeProject({
       mcuId: selectedMcuId,
       mcu,
+      mcuQuery: mcuRecord.query,
       requests,
       options,
       excludedPins,
@@ -2927,6 +3136,7 @@ function App() {
           <ThemeSwitch mode={themeMode} resolved={resolvedTheme} onChange={handleThemeChange} />
           <McuSelector
             catalog={MCU_CATALOG}
+            recent={preferences.recentMcus.filter((item) => item.runtime && !isBuiltinMcu(item.id))}
             selectedId={selectedMcuId}
             onChange={handleMcuChange}
             onPick={handleMcuPick}
@@ -3266,7 +3476,7 @@ function App() {
         onPickRecent={(item) => {
           setCenterOpen(false);
           /* 固化器件走普通切换；按需器件要重新问服务器要一次数据 */
-          if (item.runtime) handleMcuPick({ id: item.id, vendor: item.vendor, part: item.part, package: item.packageName });
+          if (item.runtime) handleMcuPick(recentQuery(item));
           else handleMcuChange(item.id);
         }}
       />
